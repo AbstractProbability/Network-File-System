@@ -64,7 +64,7 @@ void insert_word_node_at(word_node **p_head, word_node **p_tail, word_node **p_t
 // tokeniser functions
 word_package split_into_words(char *string, int start_idx, int end_idx);
 sentence_package tokenise(char *string);
-sentence_node *tokenise_file(char *file_name);
+sentence_package tokenise_file(char *file_name);
 // print the tokens to file_name.
 void token_printer();
 

@@ -322,7 +322,7 @@ sentence_package tokenise(char *string) {
     return ret_pack;
 }
 
-/* LLM GENERATED CODE */
+/* LLM START */
 // Function to read an entire file into a dynamically allocated string.
 // The caller is responsible for freeing the returned string.
 char* file_to_string(const char* filepath) {
@@ -363,11 +363,13 @@ char* file_to_string(const char* filepath) {
 
     return buffer;
 }
-/* END */
+/* LLM END */
 
 sentence_package tokenise_file(char *file_name) {
     char *string = file_to_string(file_name);
-    return tokenise(string);
+    sentence_package ret = tokenise(string);
+    // free(string);
+    return ret;
 }
 
 void print_word(word_node *word) {
@@ -391,6 +393,7 @@ void print_sentence_pack(sentence_package sentences) {
     sentence_node *temp = sentences.sentences_head;
     while (temp != NULL) {
         print_sentence(temp);
+        temp = temp->next_sentence_node;
     }
 }
 
@@ -406,6 +409,109 @@ void print_file(char *file_name) {
 // handle appropriately. return number of sentences
 // after addition of string. 1 means no new sentences have
 // been added. Hardest function
-int write_at(sentence_node **sentence, char *string, int word_index) {
 
+// 3 parts: part before the index in current sentence, part due to the
+// new string and part after the index in the current sentence. Need to 
+// join them. 
+// Easy: convert the whole thing into one string, then tokenise
+// it, then replace the original sentence with the new one.
+// Hard: convert only the string into tokens, then try inserting it at
+// the correct position.
+int write_at(sentence_node **sentence, char *string, int word_index) {
+#ifdef EFFEC
+    // TODO: FILL THIS
+    // This tokenises the string, then tries to join the part of the sentence
+    // before word index with the tokenised string and the tokenised string
+    // with the part of the sentence including and after the word index.
+    printf("hi!!\n");
+#else
+    // less space efficient because this copies the whole sentence and then tries modding it
+    if (word_index < 0 || word_index > (*sentence)->words.wc) {
+        printf("Bad word-index: must be [0, %d)\n", (*sentence)->words.wc);
+        return -1;
+    }
+
+    int cc = 0;
+    word_node *temp = (*sentence)->words.word_sequence_head;
+    if ((*sentence)->pre_whitespace != NULL) {
+        cc = strlen((*sentence)->pre_whitespace);
+    }
+    while (temp != NULL) {
+        if (temp->word != NULL) {
+            cc += strlen(temp->word);
+        }
+        if (temp->post_whitespace != NULL) {
+            cc += strlen(temp->post_whitespace);
+        }
+        temp = temp->next_word_node;
+    }
+    if (string != NULL) {
+        cc += strlen(string);
+    }
+
+    char *buffer = malloc(sizeof(char) * (cc+1));
+    int off = 0;
+    if ((*sentence)->pre_whitespace != NULL) {
+        memcpy(buffer+off, (*sentence)->pre_whitespace, strlen((*sentence)->pre_whitespace));
+        off += strlen((*sentence)->pre_whitespace);
+    }
+
+    temp = (*sentence)->words.word_sequence_head;
+    // before index part
+    while (temp != NULL && word_index) {
+        word_index--;
+        if (temp->word != NULL) {
+            memcpy(buffer+off, temp->word, strlen(temp->word));
+            off += strlen(temp->word);
+        }
+        if (temp->post_whitespace != NULL) {
+            memcpy(buffer+off, temp->post_whitespace, strlen(temp->post_whitespace));
+            off += strlen(temp->post_whitespace);
+        }
+        temp = temp->next_word_node;
+    }
+
+    // string part
+    if (string != NULL) {
+        memcpy(buffer+off, string, strlen(string));
+        off += strlen(string);
+    }
+
+    // after index part
+    while (temp != NULL) {
+        if (temp->word != NULL) {
+            memcpy(buffer+off, temp->word, strlen(temp->word));
+            off += strlen(temp->word);
+        }
+        if (temp->post_whitespace != NULL) {
+            memcpy(buffer+off, temp->post_whitespace, strlen(temp->post_whitespace));
+            off += strlen(temp->post_whitespace);
+        }
+        temp = temp->next_word_node;
+    }
+    buffer[off] = '\0';
+
+    // free(buffer);
+
+    // tokenise the whole thing
+    sentence_package new_pack = tokenise(buffer);
+    
+    // now join it    
+    // prev to orig sentence joining
+    new_pack.sentences_head->prev_sentence_node = (*sentence)->prev_sentence_node;
+    if ((*sentence)->prev_sentence_node != NULL) {
+        (*sentence)->prev_sentence_node->next_sentence_node = new_pack.sentences_head;
+    }
+
+    // orig to next sentence joining
+    new_pack.sentences_tail->next_sentence_node = (*sentence)->next_sentence_node;
+    if ((*sentence)->next_sentence_node != NULL) {
+        (*sentence)->next_sentence_node->prev_sentence_node = new_pack.sentences_tail;
+    }
+
+    // final pointer reassign
+    (*sentence) = new_pack.sentences_head;
+
+    return new_pack.sc;
+#endif
 }
