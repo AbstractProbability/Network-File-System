@@ -1,0 +1,24 @@
+# JSON parsing library for C
+# Used for: Message protocol, request/response formatting
+# Installation: 
+#   - Debian/Ubuntu: sudo apt-get install libcjson-dev
+#   - Fedora/RHEL: sudo dnf install cjson-devel
+#   - From source: https://github.com/DaveGamble/cJSON
+cJSON>=1.7.15
+
+# POSIX threads library (usually included with glibc)
+# Used for: Multithreading, connection handlers, heartbeat monitor
+# Installation: Usually pre-installed on Linux systems
+# If needed: sudo apt-get install libc6-dev
+pthread
+
+# Standard C library with POSIX socket support
+# Used for: TCP sockets, networking functions
+# Installation: Usually pre-installed on Linux systems
+# If needed: sudo apt-get install libc6-dev build-essential
+libc6
+
+# Build tools (not libraries, but needed)
+# gcc or clang compiler
+# make utility
+# Installation: sudo apt-get install build-essential
