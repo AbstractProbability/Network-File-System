@@ -8,33 +8,33 @@ char username[100];
 // Client Registration Message Creation
 
 char* create_client_registration_message() {
-    Message *msg = create_message(); // Initialize a Message object
+    cJSON *json = cJSON_CreateObject(); //initialise a cJSON object
     
-    add_string_field(msg, "type", "CLIENT_REGISTER"); // Add type field
-    add_string_field(msg, "username", username); // Add username field
+    cJSON_AddStringToObject(json, "type", "CLIENT_REGISTER"); //add type field
+    cJSON_AddStringToObject(json, "username", username); // add username field and the client username
     
-    char *result = serialize_message(msg); // Convert Message to string
-    free_message(msg); // Free Message object
+    char *msg = cJSON_Print(json); //convert cJSON object to string
+    cJSON_Delete(json); //free cJSON object
     
-    return result; // Return the message string
+    return msg; // return the message string
 }
 
 // Command Message Creation
 
 char* create_command_message(const char *cmd_type, const char *filename) {
-    Message *msg = create_message(); // Initialize Message object
+    cJSON *json = cJSON_CreateObject(); // intialise cJSON object
     
-    add_string_field(msg, "type", cmd_type); // Add command type field
-    add_string_field(msg, "username", username); // Add username field
+    cJSON_AddStringToObject(json, "type", cmd_type); // add command type field
+    cJSON_AddStringToObject(json, "username", username); // add username field
     
     if (filename) {
-        add_string_field(msg, "filename", filename); // If filename is provided, add it
+        cJSON_AddStringToObject(json, "filename", filename); // if filename is provided create filename field and add it
     }
     
-    char *result = serialize_message(msg); // Convert Message to string
-    free_message(msg); // Free Message object
+    char *msg = cJSON_Print(json); // convert cJSON object to string
+    cJSON_Delete(json); // free cJSON object
 
-    return result; // Return the message string
+    return msg; // return the message string
 }
 
 // Command Loop

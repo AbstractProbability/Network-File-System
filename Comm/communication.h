@@ -9,7 +9,6 @@
 #include <netinet/in.h> // used for sockaddr_in
 #include <arpa/inet.h> // used for inet_pton, inet_ntop
 #include <time.h> // used for time
-#include <cjson/cJSON.h> // used for JSON parsing
 #include <sys/select.h> // used for select
 #include <errno.h> // used for errno
 #include <pthread.h> // used for mutexes and threading
@@ -50,10 +49,25 @@ void close_client_socket(int client_fd);
 int send_message(int socket_fd, const char *message);
 char* receive_message(int socket_fd);
 
-// JSON helper functions
-cJSON* parse_message(const char *json_string);
-char* get_string_field(cJSON *json, const char *field_name);
-int get_int_field(cJSON *json, const char *field_name);
+// Nested array message structure
+typedef struct {
+    char **keys;
+    char **values;
+    int count;
+    int capacity;
+} Message;
+
+// Nested array message functions
+Message* create_message();
+void add_string_field(Message *msg, const char *key, const char *value);
+void add_number_field(Message *msg, const char *key, double value);
+void add_array_field(Message *msg, const char *key); // For empty arrays
+char* serialize_message(Message *msg);
+Message* parse_message(const char *msg_string);
+char* get_string_field(Message *msg, const char *field_name);
+int get_int_field(Message *msg, const char *field_name);
+double get_double_field(Message *msg, const char *field_name);
+void free_message(Message *msg);
 char* create_response(const char *status, const char *message, int error_code);
 
 // Connection registry functions

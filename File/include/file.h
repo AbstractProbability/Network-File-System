@@ -95,8 +95,6 @@ char*               pipeoutput(int fd);
 char*               get_output(char *line);
 char**              exec_file(char *file_name);
 
-// file_create_delete.c
-void                delete_file(char *file_name);
-void                create_file(char *file_name);
+// 
 
 #endif

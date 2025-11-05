@@ -52,52 +52,51 @@ void parse_arguments(int argc, char *argv[]) {
 // REGISTRATION MESSAGE
 
 char* create_ss_registration_message() {
-    cJSON *json = cJSON_CreateObject();
+    Message *msg = create_message();
     
-    cJSON_AddStringToObject(json, "type", "SS_REGISTER");
-    cJSON_AddStringToObject(json, "name", my_name);
-    cJSON_AddStringToObject(json, "ip", my_ip);
-    cJSON_AddNumberToObject(json, "nm_port", 5000);
-    cJSON_AddNumberToObject(json, "client_port", my_port);
+    add_string_field(msg, "type", "SS_REGISTER");
+    add_string_field(msg, "name", my_name);
+    add_string_field(msg, "ip", my_ip);
+    add_number_field(msg, "nm_port", 5000);
+    add_number_field(msg, "client_port", my_port);
     
     // Add empty files array for now
-    cJSON *files = cJSON_CreateArray();
-    cJSON_AddItemToObject(json, "files", files);
+    add_array_field(msg, "files");
     
-    char *msg = cJSON_Print(json);
-    cJSON_Delete(json);
+    char *result = serialize_message(msg);
+    free_message(msg);
     
-    return msg;
+    return result;
 }
 
 // HEARTBEAT HANDLER
 
 void handle_heartbeat_from_ns(const char *message) {
-    cJSON *json = parse_message(message);
-    if (!json) return;
+    Message *msg = parse_message(message);
+    if (!msg) return;
     
     // Verify it's a heartbeat
-    char *msg_type = get_string_field(json, "type");
+    char *msg_type = get_string_field(msg, "type");
     if (!msg_type || strcmp(msg_type, "HEARTBEAT") != 0) {
-        cJSON_Delete(json);
+        free_message(msg);
         return;
     }
     
     // Create response
-    cJSON *response = cJSON_CreateObject();
-    cJSON_AddStringToObject(response, "type", "HEARTBEAT_RESPONSE");
-    cJSON_AddStringToObject(response, "name", my_name);
-    cJSON_AddNumberToObject(response, "timestamp", (double)time(NULL));
+    Message *response = create_message();
+    add_string_field(response, "type", "HEARTBEAT_RESPONSE");
+    add_string_field(response, "name", my_name);
+    add_number_field(response, "timestamp", (double)time(NULL));
     
-    char *resp_msg = cJSON_Print(response);
-    cJSON_Delete(response);
+    char *resp_msg = serialize_message(response);
+    free_message(response);
     
     // Send response
     send_message(ns_socket, resp_msg);
     free(resp_msg);
     
     ss_log("DEBUG", "Heartbeat from NS - responded");
-    cJSON_Delete(json);
+    free_message(msg);
 }
 
 // NS LISTENER THREAD

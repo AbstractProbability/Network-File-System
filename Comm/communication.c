@@ -178,57 +178,227 @@ char* receive_message(int socket_fd) {
     return message;
 }
 
-// JSON HELPER FUNCTIONS
+// NESTED ARRAY MESSAGE FUNCTIONS
 
-// Parses a JSON string and returns a cJSON object, or NULL on parse error
-cJSON* parse_message(const char *json_string) {
-    cJSON *json = cJSON_Parse(json_string);
-    if (!json) {
-        const char *error_ptr = cJSON_GetErrorPtr();
-        if (error_ptr) {
-            fprintf(stderr, "[ERROR] JSON parse error: %s\n", error_ptr);
-        }
+// Creates a new message structure
+Message* create_message() {
+    Message *msg = (Message *)malloc(sizeof(Message));
+    if (!msg) {
+        perror("malloc failed");
         return NULL;
     }
-    return json;
+    
+    msg->capacity = 10;
+    msg->count = 0;
+    msg->keys = (char **)malloc(sizeof(char *) * msg->capacity);
+    msg->values = (char **)malloc(sizeof(char *) * msg->capacity);
+    
+    if (!msg->keys || !msg->values) {
+        perror("malloc failed");
+        free(msg);
+        return NULL;
+    }
+    
+    return msg;
 }
 
-// Extracts a string value from a JSON object by field name
-char* get_string_field(cJSON *json, const char *field_name) {
-    if (!json) return NULL;
+// Adds a string field to the message
+void add_string_field(Message *msg, const char *key, const char *value) {
+    if (!msg) return;
     
-    cJSON *field = cJSON_GetObjectItem(json, field_name);
-    if (!field) return NULL;
+    // Expand capacity if needed
+    if (msg->count >= msg->capacity) {
+        msg->capacity *= 2;
+        msg->keys = (char **)realloc(msg->keys, sizeof(char *) * msg->capacity);
+        msg->values = (char **)realloc(msg->values, sizeof(char *) * msg->capacity);
+    }
     
-    if (!cJSON_IsString(field)) return NULL;
+    // Allocate and copy key
+    msg->keys[msg->count] = (char *)malloc(strlen(key) + 1);
+    strcpy(msg->keys[msg->count], key);
     
-    return field->valuestring;
+    // Allocate and copy value
+    msg->values[msg->count] = (char *)malloc(strlen(value) + 1);
+    strcpy(msg->values[msg->count], value);
+    
+    msg->count++;
 }
 
-// Extracts an integer value from a JSON object by field name
-int get_int_field(cJSON *json, const char *field_name) {
-    if (!json) return -1;
+// Adds a number field to the message (converted to string)
+void add_number_field(Message *msg, const char *key, double value) {
+    if (!msg) return;
     
-    cJSON *field = cJSON_GetObjectItem(json, field_name);
-    if (!field) return -1;
-    
-    if (!cJSON_IsNumber(field)) return -1;
-    
-    return field->valueint;
+    char value_str[64];
+    snprintf(value_str, sizeof(value_str), "%.0f", value);
+    add_string_field(msg, key, value_str);
 }
 
-// Creates a JSON response with status, message, and error_code fields (caller must free)
+// Adds an empty array field to the message
+void add_array_field(Message *msg, const char *key) {
+    if (!msg) return;
+    add_string_field(msg, key, "[]");
+}
+
+// Serializes message to nested array format: [["key1","val1"],["key2","val2"]]
+char* serialize_message(Message *msg) {
+    if (!msg) return NULL;
+    
+    // Calculate required buffer size
+    size_t size = 2; // For "[]"
+    for (int i = 0; i < msg->count; i++) {
+        size += strlen(msg->keys[i]) + strlen(msg->values[i]) + 8; // ["",""],
+    }
+    
+    char *result = (char *)malloc(size);
+    if (!result) {
+        perror("malloc failed");
+        return NULL;
+    }
+    
+    strcpy(result, "[");
+    
+    for (int i = 0; i < msg->count; i++) {
+        if (i > 0) strcat(result, ",");
+        strcat(result, "[\"");
+        strcat(result, msg->keys[i]);
+        strcat(result, "\",\"");
+        strcat(result, msg->values[i]);
+        strcat(result, "\"]");
+    }
+    
+    strcat(result, "]");
+    
+    return result;
+}
+
+// Parses a nested array format string: [["key1","val1"],["key2","val2"]]
+Message* parse_message(const char *msg_string) {
+    if (!msg_string) return NULL;
+    
+    Message *msg = create_message();
+    if (!msg) return NULL;
+    
+    const char *ptr = msg_string;
+    
+    // Skip initial '['
+    while (*ptr && (*ptr == ' ' || *ptr == '[')) ptr++;
+    
+    while (*ptr && *ptr != ']') {
+        // Skip to opening quote of key
+        while (*ptr && *ptr != '"') ptr++;
+        if (!*ptr) break;
+        ptr++; // Skip opening quote
+        
+        // Extract key
+        const char *key_start = ptr;
+        while (*ptr && *ptr != '"') ptr++;
+        if (!*ptr) break;
+        
+        size_t key_len = ptr - key_start;
+        char *key = (char *)malloc(key_len + 1);
+        strncpy(key, key_start, key_len);
+        key[key_len] = '\0';
+        ptr++; // Skip closing quote
+        
+        // Skip to opening quote of value
+        while (*ptr && *ptr != '"') ptr++;
+        if (!*ptr) {
+            free(key);
+            break;
+        }
+        ptr++; // Skip opening quote
+        
+        // Extract value
+        const char *val_start = ptr;
+        while (*ptr && *ptr != '"') ptr++;
+        if (!*ptr) {
+            free(key);
+            break;
+        }
+        
+        size_t val_len = ptr - val_start;
+        char *value = (char *)malloc(val_len + 1);
+        strncpy(value, val_start, val_len);
+        value[val_len] = '\0';
+        ptr++; // Skip closing quote
+        
+        // Add to message
+        add_string_field(msg, key, value);
+        
+        free(key);
+        free(value);
+        
+        // Skip to next pair
+        while (*ptr && (*ptr == ' ' || *ptr == ',' || *ptr == ']')) {
+            if (*ptr == ']') {
+                // Check if this is the end bracket for a pair or the whole message
+                ptr++;
+                if (*ptr == ',' || *ptr == ' ') continue;
+                break;
+            }
+            ptr++;
+        }
+        if (*ptr == '[') ptr++;
+    }
+    
+    return msg;
+}
+
+// Extracts a string value from a message by field name
+char* get_string_field(Message *msg, const char *field_name) {
+    if (!msg) return NULL;
+    
+    for (int i = 0; i < msg->count; i++) {
+        if (strcmp(msg->keys[i], field_name) == 0) {
+            return msg->values[i];
+        }
+    }
+    
+    return NULL;
+}
+
+// Extracts an integer value from a message by field name
+int get_int_field(Message *msg, const char *field_name) {
+    char *value = get_string_field(msg, field_name);
+    if (!value) return -1;
+    
+    return atoi(value);
+}
+
+// Extracts a double value from a message by field name
+double get_double_field(Message *msg, const char *field_name) {
+    char *value = get_string_field(msg, field_name);
+    if (!value) return -1.0;
+    
+    return atof(value);
+}
+
+// Frees a message structure and all its allocated memory
+void free_message(Message *msg) {
+    if (!msg) return;
+    
+    for (int i = 0; i < msg->count; i++) {
+        free(msg->keys[i]);
+        free(msg->values[i]);
+    }
+    
+    free(msg->keys);
+    free(msg->values);
+    free(msg);
+}
+
+// Creates a response message with status, message, and error_code fields (caller must free)
 char* create_response(const char *status, const char *message, int error_code) {
-    cJSON *json = cJSON_CreateObject();
+    Message *msg = create_message();
     
-    cJSON_AddStringToObject(json, "status", status);
-    cJSON_AddStringToObject(json, "message", message);
-    cJSON_AddNumberToObject(json, "error_code", error_code);
+    add_string_field(msg, "status", status);
+    add_string_field(msg, "message", message);
+    add_number_field(msg, "error_code", error_code);
     
-    char *json_string = cJSON_Print(json);
-    cJSON_Delete(json);
+    char *result = serialize_message(msg);
+    free_message(msg);
     
-    return json_string;
+    return result;
 }
 
 // CONNECTION REGISTRY FUNCTIONS

@@ -1,10 +1,15 @@
 #include "../Comm/communication.h"
+#include "ns_filemanager.h"
 
 // GLOBAL VARIABLES
 
 ConnectionRegistry *registry = NULL;
 FILE *log_file = NULL;
 int ns_port = 5000;
+
+// File management structures
+active_users_list *G_active_users = NULL;
+file_path_list *G_file_paths = NULL;
 
 // Heartbeat tracking (thread-safe)
 typedef struct {
@@ -62,33 +67,33 @@ void send_heartbeats_to_ss() {
         if (!ss_conn) continue;
         
         // Create heartbeat message
-        cJSON *json = cJSON_CreateObject();
-        cJSON_AddStringToObject(json, "type", "HEARTBEAT");
-        cJSON_AddNumberToObject(json, "timestamp", (double)time(NULL));
+        Message *msg = create_message();
+        add_string_field(msg, "type", "HEARTBEAT");
+        add_number_field(msg, "timestamp", (double)time(NULL));
         
-        char *msg = cJSON_Print(json);
-        cJSON_Delete(json);
+        char *msg_str = serialize_message(msg);
+        free_message(msg);
         
         // Send heartbeat
-        if (send_message(ss_conn->socket_fd, msg) == 0) {
+        if (send_message(ss_conn->socket_fd, msg_str) == 0) {
             char log_msg[200];
             snprintf(log_msg, sizeof(log_msg), "Heartbeat sent to %s", heartbeats[i].name);
             ns_log("DEBUG", log_msg);
         }
         
-        free(msg);
+        free(msg_str);
     }
     
     pthread_mutex_unlock(&heartbeat_mutex);
 }
 
 void handle_heartbeat_response(const char *message) {
-    cJSON *json = parse_message(message);
-    if (!json) return;
+    Message *msg = parse_message(message);
+    if (!msg) return;
     
-    char *ss_name = get_string_field(json, "name");
+    char *ss_name = get_string_field(msg, "name");
     if (!ss_name) {
-        cJSON_Delete(json);
+        free_message(msg);
         return;
     }
     
@@ -108,7 +113,7 @@ void handle_heartbeat_response(const char *message) {
     }
     
     pthread_mutex_unlock(&heartbeat_mutex);
-    cJSON_Delete(json);
+    free_message(msg);
 }
 
 void check_heartbeat_timeouts() {
@@ -138,22 +143,25 @@ void check_heartbeat_timeouts() {
 // when a new client tries to register (code starts here)
 
 void handle_client_registration(const char *message, int client_socket_fd) {
-    cJSON *json = parse_message(message);
-    if (!json) {
+    Message *msg = parse_message(message);
+    if (!msg) {
         ns_log("ERROR", "Failed to parse client registration");
         return;
     }
     
-    char *username = get_string_field(json, "username");
+    char *username = get_string_field(msg, "username");
     if (!username) {
         ns_log("ERROR", "Username missing in registration");
-        cJSON_Delete(json);
+        free_message(msg);
         return;
     }
     
     char log_msg[200];
     snprintf(log_msg, sizeof(log_msg), "Client registration: username=%s", username);
     ns_log("INFO", log_msg);
+    
+    // Add user to active users list
+    add_active_user(G_active_users, username);
     
     // Update connection in registry
     Connection *conn = get_connection(registry, client_socket_fd);
@@ -171,7 +179,7 @@ void handle_client_registration(const char *message, int client_socket_fd) {
     send_message(client_socket_fd, response);
     free(response);
     
-    cJSON_Delete(json);
+    free_message(msg);
 }
 
 // when a new client tries to register (code ends here)
@@ -179,19 +187,19 @@ void handle_client_registration(const char *message, int client_socket_fd) {
 // when a new storage server tries to register (code starts here)
 
 void handle_ss_registration(const char *message, int ss_socket_fd) {
-    cJSON *json = parse_message(message);
-    if (!json) {
+    Message *msg = parse_message(message);
+    if (!msg) {
         ns_log("ERROR", "Failed to parse SS registration");
         return;
     }
     
-    char *ss_name = get_string_field(json, "name");
-    char *ss_ip = get_string_field(json, "ip");
-    int client_port = get_int_field(json, "client_port");
+    char *ss_name = get_string_field(msg, "name");
+    char *ss_ip = get_string_field(msg, "ip");
+    int client_port = get_int_field(msg, "client_port");
     
     if (!ss_name || !ss_ip || client_port == -1) {
         ns_log("ERROR", "SS registration missing required fields");
-        cJSON_Delete(json);
+        free_message(msg);
         return;
     }
     
@@ -225,7 +233,7 @@ void handle_ss_registration(const char *message, int ss_socket_fd) {
     send_message(ss_socket_fd, response);
     free(response);
     
-    cJSON_Delete(json);
+    free_message(msg);
 }
 
 // when a new storage server tries to register (code ends here)
@@ -233,16 +241,16 @@ void handle_ss_registration(const char *message, int ss_socket_fd) {
 // Handles incoming messages and routes to appropriate handlers (code starts here)
 
 void handle_incoming_message(const char *message, int sender_socket_fd) {
-    cJSON *json = parse_message(message);
-    if (!json) {
+    Message *msg = parse_message(message);
+    if (!msg) {
         ns_log("ERROR", "Failed to parse incoming message");
         return;
     }
     
-    char *msg_type = get_string_field(json, "type");
+    char *msg_type = get_string_field(msg, "type");
     if (!msg_type) {
         ns_log("ERROR", "Message type missing");
-        cJSON_Delete(json);
+        free_message(msg);
         return;
     }
     
@@ -262,7 +270,7 @@ void handle_incoming_message(const char *message, int sender_socket_fd) {
         ns_log("WARNING", log_msg);
     }
     
-    cJSON_Delete(json);
+    free_message(msg);
 }
 
 // Handles incoming messages and routes to appropriate handlers (code ends here)
@@ -293,7 +301,23 @@ void* handle_connection(void* arg) {
         free(msg);
     }
     
-    // Cleanup
+    // Cleanup - Remove user from active list if client
+    Connection *disconnecting = get_connection(registry, socket_fd);
+    if (disconnecting) {
+        if (strcmp(disconnecting->type, "CLIENT") == 0) {
+            remove_active_user(G_active_users, disconnecting->identifier);
+            snprintf(log_msg, sizeof(log_msg), 
+                     "User '%s' removed from active users", disconnecting->identifier);
+            ns_log("INFO", log_msg);
+        } else if (strcmp(disconnecting->type, "STORAGE_SERVER") == 0) {
+            // Mark SS as down in file path list
+            mark_ss_status(G_file_paths, disconnecting->identifier, 0);
+            snprintf(log_msg, sizeof(log_msg), 
+                     "Storage server '%s' marked as DOWN", disconnecting->identifier);
+            ns_log("WARNING", log_msg);
+        }
+    }
+    
     close(socket_fd);
     remove_connection(registry, socket_fd);
     
@@ -385,6 +409,25 @@ int main() {
         return 1;
     }
     
+    // Create active users list
+    G_active_users = create_active_users_list();
+    if (!G_active_users) {
+        fprintf(stderr, "Failed to create active users list\n");
+        free(registry->connections);
+        free(registry);
+        return 1;
+    }
+    
+    // Create file path list
+    G_file_paths = create_file_path_list();
+    if (!G_file_paths) {
+        fprintf(stderr, "Failed to create file path list\n");
+        free_active_users_list(G_active_users);
+        free(registry->connections);
+        free(registry);
+        return 1;
+    }
+    
     // Create logs directory
     system("mkdir -p logs");
     
@@ -396,6 +439,8 @@ int main() {
     }
     
     ns_log("INFO", "Name Server started");
+    ns_log("INFO", "Active users list initialized");
+    ns_log("INFO", "File path list initialized");
     
     // Create server socket
     int server_fd = create_server_socket(ns_port);
@@ -413,6 +458,8 @@ int main() {
     
     // Cleanup
     close_server_socket(server_fd);
+    free_file_path_list(G_file_paths);
+    free_active_users_list(G_active_users);
     free(registry->connections);
     free(registry);
     fclose(log_file);
