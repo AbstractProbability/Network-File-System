@@ -90,5 +90,11 @@ char*               join_string_at_index(sentence_node **sentence, char *string,
 void                join_sentence_with_sentence_package(sentence_node **sentence, sentence_package *p_new_pack);
 int                 update_sentence_at_index(sentence_node **sentence, char *string, int word_index);
 
+//file_exec.c
+char*               pipeoutput(int fd);
+char*               get_output(char *line);
+char**              exec_file(char *file_name);
+
+// 
 
 #endif

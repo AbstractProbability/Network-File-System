@@ -3,6 +3,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <wordexp.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
