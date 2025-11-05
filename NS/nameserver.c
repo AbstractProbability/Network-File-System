@@ -224,6 +224,39 @@ void handle_ss_registration(const char *message, int ss_socket_fd) {
     }
     pthread_mutex_unlock(&heartbeat_mutex);
     
+    // Process file paths from the storage server
+    // The "files" field should contain a comma or newline separated list of file paths
+    char *files_str = get_string_field(msg, "files");
+    if (files_str && strlen(files_str) > 2) { // Check if not empty (more than just "[]")
+        // Parse the files string and add each file path
+        // For now, assume files are comma-separated
+        char *files_copy = strdup(files_str);
+        char *token = strtok(files_copy, ",\n");
+        int file_count = 0;
+        
+        while (token) {
+            // Trim whitespace and brackets
+            while (*token == ' ' || *token == '[' || *token == ']' || *token == '"') token++;
+            char *end = token + strlen(token) - 1;
+            while (end > token && (*end == ' ' || *end == '[' || *end == ']' || *end == '"')) {
+                *end = '\0';
+                end--;
+            }
+            
+            if (strlen(token) > 0) {
+                add_file_path(G_file_paths, token, ss_name, ss_ip, client_port);
+                file_count++;
+            }
+            
+            token = strtok(NULL, ",\n");
+        }
+        
+        free(files_copy);
+        snprintf(log_msg, sizeof(log_msg), "SS '%s' registered with %d file paths", 
+                 ss_name, file_count);
+        ns_log("INFO", log_msg);
+    }
+    
     snprintf(log_msg, sizeof(log_msg), "SS registered: %s (socket=%d)", 
              ss_name, ss_socket_fd);
     ns_log("INFO", log_msg);
@@ -239,6 +272,123 @@ void handle_ss_registration(const char *message, int ss_socket_fd) {
 // when a new storage server tries to register (code ends here)
 
 // Handles incoming messages and routes to appropriate handlers (code starts here)
+
+void handle_file_request(const char *message, int client_socket_fd) {
+    Message *msg = parse_message(message);
+    if (!msg) {
+        ns_log("ERROR", "Failed to parse file request");
+        char *response = create_response("ERROR", "Invalid request format", 0);
+        send_message(client_socket_fd, response);
+        free(response);
+        return;
+    }
+    
+    char *username = get_string_field(msg, "username");
+    char *filepath = get_string_field(msg, "filepath");
+    char *operation = get_string_field(msg, "operation");
+    
+    if (!username || !filepath || !operation) {
+        ns_log("ERROR", "File request missing required fields");
+        char *response = create_response("ERROR", "Missing username, filepath, or operation", 0);
+        send_message(client_socket_fd, response);
+        free(response);
+        free_message(msg);
+        return;
+    }
+    
+    char log_msg[300];
+    snprintf(log_msg, sizeof(log_msg), "File request: user=%s, file=%s, op=%s", 
+             username, filepath, operation);
+    ns_log("INFO", log_msg);
+    
+    // Get active storage server for the file path
+    file_request_result *result = get_active_ss_for_file(G_file_paths, filepath);
+    
+    if (!result) {
+        snprintf(log_msg, sizeof(log_msg), "File not found or no active SS: %s", filepath);
+        ns_log("WARNING", log_msg);
+        char *response = create_response("ERROR", "File not found on any active storage server", 0);
+        send_message(client_socket_fd, response);
+        free(response);
+        free_message(msg);
+        return;
+    }
+    
+    // Check permissions based on operation
+    // Convert operation to access_type character for query_user_info
+    char access_type;
+    if (strcmp(operation, "READ") == 0) {
+        access_type = 'r';
+    } else if (strcmp(operation, "WRITE") == 0) {
+        access_type = 'w';
+    } else if (strcmp(operation, "EXECUTE") == 0) {
+        access_type = 'x';
+    } else {
+        snprintf(log_msg, sizeof(log_msg), "Unknown operation: %s", operation);
+        ns_log("WARNING", log_msg);
+        char *response = create_response("ERROR", "Invalid operation type", 0);
+        send_message(client_socket_fd, response);
+        free(response);
+        free_file_request_result(result);
+        free_message(msg);
+        return;
+    }
+    
+    // Query permissions using info file
+    int has_permission = 0;
+    if (result->file_info) {
+        has_permission = query_user_info(username, filepath, access_type);
+        if (has_permission == -1) {
+            snprintf(log_msg, sizeof(log_msg), "Error checking permissions for user=%s, file=%s", 
+                     username, filepath);
+            ns_log("ERROR", log_msg);
+            char *response = create_response("ERROR", "Permission check failed", 0);
+            send_message(client_socket_fd, response);
+            free(response);
+            free_file_request_result(result);
+            free_message(msg);
+            return;
+        }
+    } else {
+        // No info file found - deny by default
+        snprintf(log_msg, sizeof(log_msg), "No info file found for: %s", filepath);
+        ns_log("WARNING", log_msg);
+        has_permission = 0;
+    }
+    
+    if (!has_permission) {
+        snprintf(log_msg, sizeof(log_msg), "Permission denied: user=%s, file=%s, op=%s", 
+                 username, filepath, operation);
+        ns_log("WARNING", log_msg);
+        char *response = create_response("ERROR", "Permission denied", 0);
+        send_message(client_socket_fd, response);
+        free(response);
+        free_file_request_result(result);
+        free_message(msg);
+        return;
+    }
+    
+    // Create response with storage server details
+    Message *response_msg = create_message();
+    add_string_field(response_msg, "type", "FILE_REQUEST_RESPONSE");
+    add_string_field(response_msg, "status", "SUCCESS");
+    add_string_field(response_msg, "ss_name", result->ss_name);
+    add_string_field(response_msg, "ss_ip", result->ss_ip);
+    add_number_field(response_msg, "ss_port", result->ss_client_port);
+    add_string_field(response_msg, "filepath", filepath);
+    
+    char *response_str = serialize_message(response_msg);
+    send_message(client_socket_fd, response_str);
+    
+    snprintf(log_msg, sizeof(log_msg), "File request granted: user=%s, file=%s, ss=%s", 
+             username, filepath, result->ss_name);
+    ns_log("INFO", log_msg);
+    
+    free(response_str);
+    free_message(response_msg);
+    free_file_request_result(result);
+    free_message(msg);
+}
 
 void handle_incoming_message(const char *message, int sender_socket_fd) {
     Message *msg = parse_message(message);
@@ -263,6 +413,9 @@ void handle_incoming_message(const char *message, int sender_socket_fd) {
     }
     else if (strcmp(msg_type, "HEARTBEAT_RESPONSE") == 0) {
         handle_heartbeat_response(message);
+    }
+    else if (strcmp(msg_type, "FILE_REQUEST") == 0) {
+        handle_file_request(message, sender_socket_fd);
     }
     else {
         char log_msg[200];
