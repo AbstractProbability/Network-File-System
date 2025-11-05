@@ -35,41 +35,60 @@ typedef struct sentence_package {
     struct sentence_node *sentences_head;
     struct sentence_node *sentences_tail;
     int sc;                                     // number of sentences in this package
+    pthread_mutex_t global_lock;
 } sentence_package;
 
-// utility
-int is_delimiter(char c);
-int is_whitespace(char c);
+// utility.c
+int     is_delimiter(char c);
+int     is_whitespace(char c);
+char*   file_to_string(const char* filepath);
+int     number_of_words(word_package words);
+int     number_of_sentences(sentence_package sentences);
+int     character_count_word(word_node *word);
+int     character_count_sentence(sentence_node **sentence);
 
-// init
-sentence_node *new_sentence_node();
-sentence_package new_sentence_package();
-word_node *new_word_node(char *string);
-word_package new_word_package();
+// ll_functions.c
+/* init */
+word_node*          new_word_node(char *string);
+word_package        new_word_package();
+sentence_node*      new_sentence_node();
+sentence_package    new_sentence_package();
 
-// sentence_node ll functions
-sentence_node *get_sentence_head(sentence_node *sen_node);
-sentence_node *get_sentence_tail(sentence_node *sen_node);
-void delete_sentence_node(sentence_node **p_head, sentence_node **p_tail, sentence_node **p_to_be_deleted);
-void append_sentence_node(sentence_node **p_head, sentence_node **p_tail, sentence_node **p_to_be_added);
-void insert_sentence_node_at(sentence_node **p_head, sentence_node **p_tail, sentence_node **p_to_be_added, int idx);
+/* word_node ll functions */
+word_node*          get_word_head(word_node *sen_node);
+word_node*          get_word_tail(word_node *sen_node);
+word_node*          get_word_at_index(word_node **p_head, int index);
+void                append_word_node(word_node **p_head, word_node **p_tail, word_node **p_to_be_added);
+void                delete_word_node(word_node **p_head, word_node **p_tail, word_node **p_to_be_deleted);
+// void                insert_word_node_at(word_node **p_head, word_node **p_tail, word_node **p_to_be_added, int idx);
+void                free_word_node(word_node *word);
 
-// word_node ll functions
-word_node *get_word_head(word_node *sen_node);
-word_node *get_word_tail(word_node *sen_node);
-void delete_word_node(word_node **p_head, word_node **p_tail, word_node **p_to_be_deleted);
-void append_word_node(word_node **p_head, word_node **p_tail, word_node **p_to_be_added);
-void insert_word_node_at(word_node **p_head, word_node **p_tail, word_node **p_to_be_added, int idx);
+/* sentence_node ll functions */
+sentence_node*      get_sentence_head(sentence_node *sen_node);
+sentence_node*      get_sentence_tail(sentence_node *sen_node);
+sentence_node*      get_sentence_at_index(sentence_node **p_head, int index);
+void                append_sentence_node(sentence_node **p_head, sentence_node **p_tail, sentence_node **p_to_be_added);
+void                delete_sentence_node(sentence_node **p_head, sentence_node **p_tail, sentence_node **p_to_be_deleted);
+// void                insert_sentence_node_at(sentence_node **p_head, sentence_node **p_tail, sentence_node **p_to_be_added, int idx);
+void                free_sentence_node(sentence_node *sentence);
+void                free_sentence_package(sentence_package sentences);
 
-// tokeniser functions
-word_package split_into_words(char *string, int start_idx, int end_idx);
-sentence_package tokenise(char *string);
-sentence_package tokenise_file(char *file_name);
-// print the tokens to file_name.
-void token_printer();
+/* print functions */
+void                print_word(word_node *word, FILE *fptr);
+void                print_sentence(sentence_node *sentence, FILE *fptr);
+void                print_sentence_pack(sentence_package sentences, FILE *fptr);
+void                print_file(char *in_file_name, char *out_file_name);
 
-// write at a certain word index in the sentence
-void write_at(sentence_node **p_sentence, char *string, int word_index);
+// tokeniser.c
+word_package        split_into_words(char *string, int start_idx, int end_idx);
+sentence_package    tokenise(char *string);
+sentence_package    tokenise_file(char *file_name);
+
+// file_write.c
+int                 character_count_sentence_and_string(sentence_node **sentence, char *string, int word_index);
+char*               join_string_at_index(sentence_node **sentence, char *string, int word_index);
+void                join_sentence_with_sentence_package(sentence_node **sentence, sentence_package *p_new_pack);
+int                 update_sentence_at_index(sentence_node **sentence, char *string, int word_index);
 
 
 #endif
