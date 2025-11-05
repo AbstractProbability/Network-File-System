@@ -97,6 +97,6 @@ char**              exec_file(char *file_name);
 
 // file_create_delete.c
 void                delete_file(char *file_name);
-void                create_file(char *file_name);
+void                create_file(char *file_name, char *user_name);
 
 #endif
