@@ -6,6 +6,12 @@
 int create_server_socket(int port) {
     int server_fd;
     struct sockaddr_in address;
+//     struct sockaddr_in {
+//          sa_family_t    sin_family;  // Address family (AF_INET for IPv4)
+//          in_port_t      sin_port;    // Port number (in network byte order)
+//          struct in_addr sin_addr;    // IPv4 address (in network byte order)
+//          char           sin_zero[8]; // Padding to make it same size as sockaddr
+//     };
     int opt = 1; // Enables SO_REUSEADDR to quickly rebind after restart
 
     // Create a TCP socket
@@ -14,16 +20,29 @@ int create_server_socket(int port) {
         return -1;
     }
 
+    // socket(AF_INET, SOCK_STREAM, 0)
+    //    ^        ^            ^
+    //    |        |            |
+    //    |        |            +-- Protocol (0 = auto-select TCP for SOCK_STREAM)
+    //    |        +--------------- Socket Type (TCP)
+    //    +------------------------ Address Family (IPv4)
+
     // Allow reusing the port even if it's in TIME_WAIT state
+    //--------------------------------------------
+
+
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
         perror("setsockopt failed");
         close(server_fd);
         return -1;
     }
+    //When a server closes, the port enters TIME_WAIT state for 30-120 seconds (to handle late packets). If you try to restart the server immediately it shows server already in use
+    //SO_REUSEADDR allows you to bind to the port even if it's in TIME_WAIT, enabling immediate server restart without waiting.
+
 
     // Configure to listen on all network interfaces on the specified port
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_addr.s_addr = INADDR_ANY; //INADDR_ANY is a special constant that means "bind to all available network interfaces" on the machine.
     address.sin_port = htons(port); // Convert port to network byte order
 
     // Bind the socket to the address and port
@@ -33,7 +52,7 @@ int create_server_socket(int port) {
         return -1;
     }
 
-    // Start listening with a backlog queue of 10 pending connections
+    // [IMP] Start listening with a backlog queue of 10 pending connections
     if (listen(server_fd, 10) < 0) {
         perror("listen failed");
         close(server_fd);
@@ -173,7 +192,9 @@ char* receive_message(int socket_fd) {
         perror("malloc failed");
         return NULL;
     }
-
+    //Message struct has 4 fields , keys,values,count adn capacity
+    // message is just a string of the above Message struct serialized in nested array format
+    // '[["operation","READ"],["path","/home/data.txt"]]'
     strcpy(message, buffer);
     return message;
 }
@@ -188,7 +209,7 @@ Message* create_message() {
         return NULL;
     }
     
-    msg->capacity = 10;
+    msg->capacity = 10; // At max 10 key-value pairs initially
     msg->count = 0;
     msg->keys = (char **)malloc(sizeof(char *) * msg->capacity);
     msg->values = (char **)malloc(sizeof(char *) * msg->capacity);

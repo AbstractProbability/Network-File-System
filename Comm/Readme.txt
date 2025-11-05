@@ -15,7 +15,8 @@ Behaviors like allowing port reuse (SO_REUSEADDR), enabling keep-alive probes (S
 6. To handle signals like SIGINT gracefully during blocking socket operations, set up a signal handler using sigaction with the SA_RESTART flag. This ensures interrupted system calls are automatically retried.
     struct sigaction sa = { .sa_handler = handler /* or SIG_IGN */, .sa_flags = SA_RESTART };
     sigaction(SIGINT, &sa, NULL);
-
+7. Handles partial sends
+8. dont send an array as the value of a field in the message struct
 
 
 LIST OF functions
@@ -48,3 +49,19 @@ add_connection(ConnectionRegistry *registry, Connection *conn) — Adds a connec
 get_connection(ConnectionRegistry *registry, int socket_fd) — Finds and returns a pointer to the connection with the given socket_fd, or NULL if not found (thread-safe).
 remove_connection(ConnectionRegistry *registry, int socket_fd) — Removes the connection with the given socket_fd from the registry (thread-safe).
 print_all_connections(ConnectionRegistry *registry) — Prints a formatted table of all active connections with counts by type (thread-safe).
+
+MULTI-THREADING APPROACH
+========================
+
+ARCHITECTURE:
+- Main thread runs accept loop calling accept_client() sequentially
+- Each accepted client spawns a dedicated worker thread via pthread_create()
+- Worker threads handle client communication independently and in parallel
+- Connection queue (backlog=10) holds waiting clients in FIFO order
+
+THREAD SAFETY:
+- ConnectionRegistry protected by pthread_mutex for concurrent access
+- One thread accepts, many threads process simultaneously
+
+WHY: Scalable (100s-1000s clients), isolated (one slow client doesn't block others), standard pattern
+

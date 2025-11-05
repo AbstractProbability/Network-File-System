@@ -49,7 +49,7 @@ void close_client_socket(int client_fd);
 int send_message(int socket_fd, const char *message);
 char* receive_message(int socket_fd);
 
-// Nested array message structure
+// Nested array structure
 typedef struct {
     char **keys;
     char **values;

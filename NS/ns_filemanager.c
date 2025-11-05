@@ -15,8 +15,7 @@ active_users_list* create_active_users_list() {
     }
     
     list->head = NULL;
-    pthread_mutex_init(&list->lock, NULL);
-    
+    pthread_mutex_init(&list->lock, NULL); 
     return list;
 }
 

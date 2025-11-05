@@ -218,18 +218,20 @@ int main() {
     printf("Username: ");
     fflush(stdout);
     if (!fgets(username, sizeof(username), stdin)) {
-        fprintf(stderr, "Failed to read username\n");
+        fprintf(stderr, "\nError: Failed to read username\n");
         return 1;
     }
     username[strcspn(username, "\n")] = 0; // Remove newline character
     
     if (strlen(username) == 0) {
-        fprintf(stderr, "Username cannot be empty\n"); // Check if username is empty, if empty raise error and exit
+        fprintf(stderr, "Error: Username cannot be empty\n"); // Check if username is empty, if empty raise error and exit
         return 1;
     }
     
+    printf("\nConnecting to Name Server...\n");
+    fflush(stdout);
+    
     // Connect to Name Server
-    printf("Connecting to Name Server...\n");
     ns_socket = create_client_socket("127.0.0.1", 5000); //[IMP] connect to NS at localhost:5000 and IP 127.0.0.1
     // all clients will have same hardcoded ip (127.0.0.1) and port (5000), but os will provide each with an unique socket fd and ephemeral port
     
@@ -248,11 +250,12 @@ int main() {
 
     
     if (ns_socket < 0) {
-        fprintf(stderr, "Failed to connect to Name Server\n"); // if ns_socket is negative the socket creation failed, exit with error
+        fprintf(stderr, "Error: Failed to connect to Name Server\n"); // if ns_socket is negative the socket creation failed, exit with error
         return 1; // [IMP] returning 1 to indicate error
     }
     
-    printf("Connected to Name Server\n"); // if connected successfully print message
+    printf("✓ Connected to Name Server\n"); // if connected successfully print message
+    fflush(stdout);
     
     // Send registration
     char *reg_msg = create_client_registration_message();
@@ -283,5 +286,3 @@ int main() {
     
     return 0;
 }
-
-// Sanity check 1 : I am sane xD Peace <3 !
