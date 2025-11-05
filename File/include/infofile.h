@@ -1,3 +1,6 @@
+#ifndef INFOFILE_H
+#define INFOFILE_H
+
 #include "../../common.h"
 
 // this should have functions to interact with and use
@@ -5,7 +8,7 @@
 
 typedef struct info_file {
     int wc;
-    int cc;
+    int size;               // file size/ character count
     int last_access_time;
     // int creation_time;
     char *owner;
@@ -25,3 +28,5 @@ void update_last_access_time(char *file_name, int new_last_access_time);
 info_file *read_info_file(char *file_name);
 void free_info_file(info_file *info);
 int query_user_info(char *username, char *file_name, char access_type);
+
+#endif

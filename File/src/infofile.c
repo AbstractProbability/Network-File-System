@@ -44,7 +44,11 @@ int query_user_info(char *user_name, char *file_name, char access_type) {
 }
 
 void delete_info_file(char *file_name) {
-
+    chdir(home_dir);
+    chdir("info_dir");
+    if(remove(file_name)) {
+        printf("delete_infofile: some error occurred.\n");
+    }
 }
 
 void create_info_file(char *file_name, char *user_name) {
@@ -54,7 +58,7 @@ void create_info_file(char *file_name, char *user_name) {
         printf("create_info_file error: info file already exists\n");
     } else {
         FILE *fptr = fopen(file_name, "w");
-        fprintf(fptr, "wc=0;cc=0;last_access_time=0;owner=%s;r_access_users=%s,;w_access_users=%s,x_access_users=%s,;",
+        fprintf(fptr, "wc=0;size=0;last_access_time=0;owner=%s;r_access_users=%s,;w_access_users=%s,x_access_users=%s,;",
                 user_name, user_name, user_name, user_name);
         fclose(fptr);
     }
@@ -154,8 +158,8 @@ info_file *read_info_file(char *file_name) {
 
     // Use a single fscanf call to parse the entire file based on its format
     int items_scanned = fscanf(fptr,
-        "wc=%d;cc=%d;last_access_time=%d;owner=%255[^;];r_access_users=%1023[^;];w_access_users=%1023[^;];x_access_users=%1023[^;];",
-        &ret->wc, &ret->cc, &ret->last_access_time,
+        "wc=%d;size=%d;last_access_time=%d;owner=%255[^;];r_access_users=%1023[^;];w_access_users=%1023[^;];x_access_users=%1023[^;];",
+        &ret->wc, &ret->size, &ret->last_access_time,
         owner_buf, r_users_buf, w_users_buf, x_users_buf);
 
     fclose(fptr); // We are done with the file, so close it immediately.
@@ -194,8 +198,8 @@ int write_info_file(char* file_name, info_file* info) {
     char* x_users_str = join_user_list(info->x_access_users);
 
     // Write the formatted data to the file
-    fprintf(fptr, "wc=%d;cc=%d;last_access_time=%d;owner=%s;r_access_users=%s;w_access_users=%s;x_access_users=%s;",
-            info->wc, info->cc, info->last_access_time,
+    fprintf(fptr, "wc=%d;size=%d;last_access_time=%d;owner=%s;r_access_users=%s;w_access_users=%s;x_access_users=%s;",
+            info->wc, info->size, info->last_access_time,
             info->owner, r_users_str, w_users_str, x_users_str);
 
     // Clean up
@@ -333,11 +337,11 @@ void update_wc(char* file_name, int new_wc) {
     free_info_file(info);             // Clean up
 }
 
-void update_cc(char* file_name, int new_cc) {
+void update_size(char* file_name, int new_size) {
     info_file* info = read_info_file(file_name);
     if (info == NULL) return;
 
-    info->cc = new_cc; // Modify the struct in memory
+    info->size = new_size; // Modify the struct in memory
 
     write_info_file(file_name, info); // Write it back
     free_info_file(info);             // Clean up
