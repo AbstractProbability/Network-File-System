@@ -1,5 +1,19 @@
-STORAGE SERVER (SS) - documentation
+To keep in mind : 
 
+1. while logging heartbeat messages, timestamp isnt being saved
+
+2. log directory is being created in the current working directory instead of home directory
+
+3. ss talks to client using soocket at its 5001 port
+
+4. ss talks to ns using socket at ns 5000 port
+
+5. ss event loop creates detached threads for each client connection and for ns listener
+
+6. ss creates log file at logs/SS1.log (or SS2.log etc based on name) 
+
+
+STORAGE SERVER (SS) - documentation
 
 OVERVIEW
 --------
