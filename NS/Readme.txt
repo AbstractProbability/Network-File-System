@@ -1,3 +1,26 @@
+readme
+
+ss arent being pruned if they disconnect, please decide one of the two
+
+1. dont prune the ss (might help in improving efficiency of bs and when ss come online)
+2. prune, simple and straightforward, loosing valuable information of everybody who had access to the file
+
+pending issue
+
+so each heartbeat correspons to an ss, and all this is being done in an array, so if an ss disconnects that heartbeats becomes useless and the array has wasted spac
+
+
+
+
+
+
+
+
+
+
+
+bs
+
 1. Main Thread
 
 Purpose: Initialization and accepting new connections

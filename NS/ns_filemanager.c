@@ -3,11 +3,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// ============================================================================
-// ACTIVE USERS LIST IMPLEMENTATION
-// ============================================================================
+// ============================ACTIVE USERS LIST IMPLEMENTATION=============================
 
 active_users_list* create_active_users_list() {
+    // initialisation of active users list
+    // this function creates and returns a pointer to an empty active users list (initiallisation)
     active_users_list *list = (active_users_list*)malloc(sizeof(active_users_list));
     if (!list) {
         perror("malloc failed for active_users_list");
@@ -19,6 +19,7 @@ active_users_list* create_active_users_list() {
     return list;
 }
 
+// Adds a user to the active users list (uses mutex for thread safety)
 void add_active_user(active_users_list *list, const char *username) {
     if (!list || !username) return;
     
@@ -50,6 +51,8 @@ void add_active_user(active_users_list *list, const char *username) {
     pthread_mutex_unlock(&list->lock);
 }
 
+// Removes a user from the active users list (uses mutex for thread safety)
+// in name server, when a client disconnects or its heartbeat fails, we remove them from active users list
 void remove_active_user(active_users_list *list, const char *username) {
     if (!list || !username) return;
     
@@ -76,6 +79,7 @@ void remove_active_user(active_users_list *list, const char *username) {
     pthread_mutex_unlock(&list->lock);
 }
 
+// Checks if a user is active (uses mutex for thread safety)
 int is_user_active(active_users_list *list, const char *username) {
     if (!list || !username) return 0;
     
@@ -94,6 +98,7 @@ int is_user_active(active_users_list *list, const char *username) {
     return 0;
 }
 
+// Prints the active users, self explanatory
 void print_active_users(active_users_list *list) {
     if (!list) return;
     
@@ -113,6 +118,7 @@ void print_active_users(active_users_list *list) {
     pthread_mutex_unlock(&list->lock);
 }
 
+// Frees the active users list and all its nodes, self explanatory
 void free_active_users_list(active_users_list *list) {
     if (!list) return;
     
@@ -130,9 +136,7 @@ void free_active_users_list(active_users_list *list) {
     free(list);
 }
 
-// ============================================================================
-// FILE PATH LIST IMPLEMENTATION
-// ============================================================================
+// ===============================FILE PATH LIST IMPLEMENTATION================================
 
 file_path_list* create_file_path_list() {
     file_path_list *list = (file_path_list*)malloc(sizeof(file_path_list));
@@ -272,6 +276,7 @@ void remove_file_path(file_path_list *list, const char *file_path) {
     pthread_mutex_unlock(&list->lock);
 }
 
+// [IMP] the given function isnt being implement, currently if an ss disconnects a cascading update sets ss_isalive to 0
 void remove_ss_from_file(file_path_list *list, const char *file_path, const char *ss_name) {
     if (!list || !file_path || !ss_name) return;
     
@@ -310,6 +315,7 @@ void remove_ss_from_file(file_path_list *list, const char *file_path, const char
     pthread_mutex_unlock(&list->lock);
 }
 
+// currently if ss disconnects its marked not alive by setting is_alive to 0
 void mark_ss_status(file_path_list *list, const char *ss_name, int is_alive) {
     if (!list || !ss_name) return;
     
@@ -334,6 +340,7 @@ void mark_ss_status(file_path_list *list, const char *ss_name, int is_alive) {
     pthread_mutex_unlock(&list->lock);
 }
 
+// this prints all filepaths their corresponding ss and status of those ss
 void print_file_path_list(file_path_list *list) {
     if (!list) return;
     
@@ -397,9 +404,7 @@ void free_file_path_list(file_path_list *list) {
     free(list);
 }
 
-// ============================================================================
-// FILE REQUEST HANDLER IMPLEMENTATION
-// ============================================================================
+// ===============================FILE REQUEST HANDLER IMPLEMENTATION==========================
 
 file_request_result* get_active_ss_for_file(file_path_list *list, const char *file_path) {
     if (!list || !file_path) {

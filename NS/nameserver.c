@@ -126,6 +126,8 @@ void check_heartbeat_timeouts() {
         
         if (elapsed > 10.0 && heartbeats[i].is_alive) {
             heartbeats[i].is_alive = 0;
+            // Propagate status change to file path mapping so SS is marked down everywhere
+            mark_ss_status(G_file_paths, heartbeats[i].name, 0);
             char log_msg[200];
             snprintf(log_msg, sizeof(log_msg), 
                      "WARNING: %s failed heartbeat - Status: DOWN", heartbeats[i].name);

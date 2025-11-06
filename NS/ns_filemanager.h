@@ -4,18 +4,18 @@
 #include "../Comm/communication.h"
 #include "../File/include/infofile.h"
 
-// ============================================================================
 // ACTIVE USERS LIST
-// ============================================================================
 
+// below is the linked list of all available users currently active in the system
 typedef struct active_user_node {
     char username[100];
     struct active_user_node *next;
 } active_user_node;
 
+
 typedef struct {
     active_user_node *head;
-    pthread_mutex_t lock;
+    pthread_mutex_t lock; // mutex for thread safe access so that multiple ss can play with it simultaneously
 } active_users_list;
 
 // Active users functions
@@ -26,10 +26,9 @@ int is_user_active(active_users_list *list, const char *username);
 void print_active_users(active_users_list *list);
 void free_active_users_list(active_users_list *list);
 
-// ============================================================================
 // STORAGE SERVER LIST (for a specific file)
-// ============================================================================
 
+//below is a linked list of storage servers that have a specific file path
 typedef struct ss_node {
     char ss_name[100];
     char ss_ip[INET_ADDRSTRLEN];
@@ -38,20 +37,18 @@ typedef struct ss_node {
     struct ss_node *next;
 } ss_node;
 
-// ============================================================================
-// FILE PATH MAPPING
-// ============================================================================
+// ====================== FILE PATH MAPPING ====================================
 
 typedef struct file_entry {
     char file_path[512];
     ss_node *storage_servers;  // Linked list of storage servers having this file
-    pthread_mutex_t lock;
+    pthread_mutex_t lock; // safe access to file entry which contains a particular file path and list of ss that have it
     struct file_entry *next;
 } file_entry;
 
 typedef struct {
     file_entry *head;
-    pthread_mutex_t lock;
+    pthread_mutex_t lock; // safe access to the entire file path list
 } file_path_list;
 
 // File path list functions
@@ -64,9 +61,7 @@ void mark_ss_status(file_path_list *list, const char *ss_name, int is_alive);
 void print_file_path_list(file_path_list *list);
 void free_file_path_list(file_path_list *list);
 
-// ============================================================================
-// FILE REQUEST HANDLER
-// ============================================================================
+// ========================FILE REQUEST HANDLER==============================
 
 typedef struct {
     char ss_name[100];
@@ -75,7 +70,20 @@ typedef struct {
     info_file *file_info;  // Metadata and permissions for the file
 } file_request_result;
 
-/**
+// structure of the **info_file** for reference
+// typedef struct info_file {
+//     int wc;
+//     int size;               // file size/ character count
+//     int last_access_time;
+//     // int creation_time;
+//     char *owner;
+//     char **r_access_users; // viewing
+//     char **w_access_users; // editing
+//     char **x_access_users; // executing
+// } info_file;
+
+/** 
+ * the below is a set of comments for the function get_active_ss_for_file
  * Main function to get an active storage server for a file path
  * 
  * @param list - The file path list maintained by NS
@@ -88,6 +96,7 @@ file_request_result* get_active_ss_for_file(file_path_list *list, const char *fi
 
 /**
  * Free the file request result
+ * to free the memory allocated for file_request_result structure
  */
 void free_file_request_result(file_request_result *result);
 
