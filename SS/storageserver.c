@@ -36,6 +36,7 @@ void ss_log(const char *level, const char *message) {
 // ARGUMENT PARSING
 
 void parse_arguments(int argc, char *argv[]) {
+    int to_be_my_port = my_port; // temporary variable to hold port before validation
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
             strncpy(my_name, argv[i + 1], sizeof(my_name) - 1); // --name <NAME> sets global variable my_name to input NAME 
