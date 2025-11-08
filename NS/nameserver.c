@@ -275,6 +275,36 @@ void handle_ss_registration(const char *message, int ss_socket_fd) {
 
 // Handles incoming messages and routes to appropriate handlers (code starts here)
 
+void handle_list_request(const char *message, int client_socket_fd) {
+    // Collect active users
+    char users_str[1024] = "";
+    
+    pthread_mutex_lock(&G_active_users->lock);
+    active_user_node *current = G_active_users->head;
+    while (current) {
+        if (strlen(users_str) > 0) strcat(users_str, ",");
+        strcat(users_str, current->username);
+        current = current->next;
+    }
+    pthread_mutex_unlock(&G_active_users->lock);
+    
+    // Create response
+    Message *response_msg = create_message();
+    add_string_field(response_msg, "type", "LIST_RESPONSE");
+    add_string_field(response_msg, "status", "SUCCESS");
+    add_string_field(response_msg, "users", users_str);
+    
+    char *response_str = serialize_message(response_msg);
+    send_message(client_socket_fd, response_str);
+    
+    char log_msg[300];
+    snprintf(log_msg, sizeof(log_msg), "LIST request served: users=%s", users_str);
+    ns_log("INFO", log_msg);
+    
+    free(response_str);
+    free_message(response_msg);
+}
+
 void handle_file_request(const char *message, int client_socket_fd) {
     Message *msg = parse_message(message);
     if (!msg) {
@@ -418,6 +448,9 @@ void handle_incoming_message(const char *message, int sender_socket_fd) {
     }
     else if (strcmp(msg_type, "FILE_REQUEST") == 0) {
         handle_file_request(message, sender_socket_fd);
+    }
+    else if (strcmp(msg_type, "LIST") == 0) {
+        handle_list_request(message, sender_socket_fd);
     }
     else {
         char log_msg[200];

@@ -75,6 +75,7 @@ void command_loop() { // handles user input and sends commands to NS
         else if (strcasecmp(command, "LIST") == 0) {
             char *msg = create_command_message("LIST", NULL);
             
+            
             if (send_message(ns_socket, msg) < 0) {
                 printf("Error: Failed to send command\n");
                 free(msg);

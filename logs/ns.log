@@ -11,3 +11,48 @@
 [Sat Nov  8 10:13:52 2025] [DEBUG] Thread started for connection fd=8
 [Sat Nov  8 10:13:52 2025] [ERROR] Message type missing
 [Sat Nov  8 10:13:52 2025] [DEBUG] Thread started for connection fd=9
+[Sat Nov  8 10:15:23 2025] [INFO] Name Server started
+[Sat Nov  8 10:15:23 2025] [INFO] Active users list initialized
+[Sat Nov  8 10:15:23 2025] [INFO] File path list initialized
+[Sat Nov  8 10:15:23 2025] [INFO] Listening for connections
+[Sat Nov  8 10:15:23 2025] [INFO] Entering event loop
+[Sat Nov  8 10:15:23 2025] [INFO] Heartbeat thread started
+[Sat Nov  8 10:15:29 2025] [DEBUG] Thread started for connection fd=5
+[Sat Nov  8 10:15:29 2025] [ERROR] Message type missing
+[Sat Nov  8 10:15:29 2025] [DEBUG] Thread started for connection fd=6
+[Sat Nov  8 10:15:29 2025] [DEBUG] Thread started for connection fd=7
+[Sat Nov  8 10:16:29 2025] [INFO] Name Server started
+[Sat Nov  8 10:16:29 2025] [INFO] Active users list initialized
+[Sat Nov  8 10:16:29 2025] [INFO] File path list initialized
+[Sat Nov  8 10:16:29 2025] [INFO] Listening for connections
+[Sat Nov  8 10:16:29 2025] [INFO] Entering event loop
+[Sat Nov  8 10:16:29 2025] [INFO] Heartbeat thread started
+[Sat Nov  8 10:16:41 2025] [DEBUG] Thread started for connection fd=5
+[Sat Nov  8 10:16:41 2025] [INFO] Client registration: username=akshat
+[Sat Nov  8 10:16:41 2025] [INFO] Client registered: akshat (socket=5)
+[Sat Nov  8 10:17:07 2025] [INFO] Connection closed: fd=5
+[Sat Nov  8 10:17:07 2025] [INFO] User 'akshat' removed from active users
+[Sat Nov  8 10:17:12 2025] [DEBUG] Thread started for connection fd=6
+[Sat Nov  8 10:17:12 2025] [INFO] Client registration: username=mayank
+[Sat Nov  8 10:17:12 2025] [INFO] Client registered: mayank (socket=6)
+[Sat Nov  8 10:17:27 2025] [WARNING] Unknown message type: LIST
+[Sat Nov  8 10:17:29 2025] [DEBUG] Thread started for connection fd=5
+[Sat Nov  8 10:17:29 2025] [ERROR] Message type missing
+[Sat Nov  8 10:17:29 2025] [DEBUG] Thread started for connection fd=7
+[Sat Nov  8 10:17:29 2025] [DEBUG] Thread started for connection fd=8
+[Sat Nov  8 10:20:30 2025] [INFO] Name Server started
+[Sat Nov  8 10:20:30 2025] [INFO] Active users list initialized
+[Sat Nov  8 10:20:30 2025] [INFO] File path list initialized
+[Sat Nov  8 10:20:30 2025] [INFO] Listening for connections
+[Sat Nov  8 10:20:30 2025] [INFO] Entering event loop
+[Sat Nov  8 10:20:30 2025] [INFO] Heartbeat thread started
+[Sat Nov  8 10:20:49 2025] [DEBUG] Thread started for connection fd=5
+[Sat Nov  8 10:20:49 2025] [INFO] Client registration: username=akshat
+[Sat Nov  8 10:20:49 2025] [INFO] Client registered: akshat (socket=5)
+[Sat Nov  8 10:20:50 2025] [DEBUG] Thread started for connection fd=6
+[Sat Nov  8 10:20:50 2025] [ERROR] Message type missing
+[Sat Nov  8 10:20:50 2025] [DEBUG] Thread started for connection fd=7
+[Sat Nov  8 10:20:52 2025] [INFO] LIST request served: users=akshat
+[Sat Nov  8 10:21:27 2025] [INFO] LIST request served: users=akshat
+[Sat Nov  8 10:21:33 2025] [INFO] Connection closed: fd=5
+[Sat Nov  8 10:21:33 2025] [INFO] User 'akshat' removed from active users
