@@ -1,4 +1,5 @@
 #include "../include/infofile.h"
+#include <string.h>
 
 // does 'username' have 'access_type' access to 'file_name'?
 int query_user_info(char *user_name, char *file_name, char access_type) {

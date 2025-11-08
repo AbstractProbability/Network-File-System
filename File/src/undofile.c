@@ -44,11 +44,11 @@ cleanup:
 }
 
 // this will also be when the commit lock is activated.
-void delete_undofile(char *file_name) {
+void delete_undo_file(char *file_name) {
     chdir(home_dir);
     chdir("undo_dir");
     if(remove(file_name)) {
-        printf("delete_undofile: some error occurred.\n");
+        printf("delete_undo_file: some error occurred.\n");
     }
 }
 

@@ -5,7 +5,7 @@
 
 void create_undofile(char *file_name);
 void update_undofile(char *file_name);
-void delete_undofile(char *file_name);
+void delete_undo_file(char *file_name);
 void do_undo(char *file_name);
 
 #endif

@@ -1,4 +1,5 @@
 #include "../include/file.h"
+#include <sys/wait.h>
 
 char* pipeoutput(int fd) {
     char *buffer = malloc(1025);

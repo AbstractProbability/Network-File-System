@@ -21,6 +21,7 @@ RELEASE_FLAGS = -O2
 
 # Source directories
 COMM_SRC = Comm/communication.c
+COMMON_SRC = common.c
 FILE_SRC = File/src/file_create_delete.c File/src/file_write.c File/src/file_exec.c \
            File/src/infofile.c File/src/checkpointfile.c File/src/undofile.c \
            File/src/ll_functions.c File/src/tokeniser.c File/src/utility.c
@@ -28,6 +29,7 @@ FILE_INCLUDE = -IFile/include
 
 # Object files
 COMM_OBJ = build/communication.o
+COMMON_OBJ = build/common.o
 FILE_OBJ = build/file_create_delete.o build/file_write.o build/file_exec.o \
            build/infofile.o build/checkpointfile.o build/undofile.o \
            build/ll_functions.o build/tokeniser.o build/utility.o
@@ -73,24 +75,24 @@ storageserver-only: $(STORAGESERVER)
 # ============================================================================
 # CLIENT BUILD
 # ============================================================================
-$(CLIENT): build $(COMM_OBJ) Client/client.c
-	$(CC) $(CFLAGS) $(FILE_INCLUDE) -o $@ Client/client.c $(COMM_OBJ) -lpthread
+$(CLIENT): build $(COMM_OBJ) $(COMMON_OBJ) Client/client.c
+	$(CC) $(CFLAGS) $(FILE_INCLUDE) -o $@ Client/client.c $(COMM_OBJ) $(COMMON_OBJ) -lpthread
 	@echo "✓ Built: $@"
 
 # ============================================================================
 # NAMESERVER BUILD
 # ============================================================================
-$(NAMESERVER): build $(COMM_OBJ) $(FILE_OBJ) NS/nameserver.c NS/ns_filemanager.c
+$(NAMESERVER): build $(COMM_OBJ) $(COMMON_OBJ) $(FILE_OBJ) NS/nameserver.c NS/ns_filemanager.c
 	$(CC) $(CFLAGS) $(FILE_INCLUDE) -o $@ NS/nameserver.c NS/ns_filemanager.c \
-		$(COMM_OBJ) $(FILE_OBJ) -lpthread
+		$(COMM_OBJ) $(COMMON_OBJ) $(FILE_OBJ) -lpthread
 	@echo "✓ Built: $@"
 
 # ============================================================================
 # STORAGE SERVER BUILD
 # ============================================================================
-$(STORAGESERVER): build $(COMM_OBJ) $(FILE_OBJ) SS/storageserver.c
+$(STORAGESERVER): build $(COMM_OBJ) $(COMMON_OBJ) $(FILE_OBJ) SS/storageserver.c
 	$(CC) $(CFLAGS) $(FILE_INCLUDE) -o $@ SS/storageserver.c \
-		$(COMM_OBJ) $(FILE_OBJ) -lpthread
+		$(COMM_OBJ) $(COMMON_OBJ) $(FILE_OBJ) -lpthread
 	@echo "✓ Built: $@"
 
 # ============================================================================
@@ -100,6 +102,11 @@ $(STORAGESERVER): build $(COMM_OBJ) $(FILE_OBJ) SS/storageserver.c
 # Comm module
 build/communication.o: $(COMM_SRC) build
 	$(CC) $(CFLAGS) -c $(COMM_SRC) -o $@
+	@echo "  ✓ Compiled: $@"
+
+# Common module
+build/common.o: $(COMMON_SRC) build
+	$(CC) $(CFLAGS) -c $(COMMON_SRC) -o $@
 	@echo "  ✓ Compiled: $@"
 
 # File module objects

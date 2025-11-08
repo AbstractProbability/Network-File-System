@@ -57,7 +57,7 @@ sentence_package    new_sentence_package();
 /* word_node ll functions */
 word_node*          get_word_head(word_node *sen_node);
 word_node*          get_word_tail(word_node *sen_node);
-word_node*          get_word_at_index(word_node **p_head, int index);
+word_node*          get_word_at_index(word_node **p_head, word_node **p_tail, int index);
 void                append_word_node(word_node **p_head, word_node **p_tail, word_node **p_to_be_added);
 void                delete_word_node(word_node **p_head, word_node **p_tail, word_node **p_to_be_deleted);
 // void                insert_word_node_at(word_node **p_head, word_node **p_tail, word_node **p_to_be_added, int idx);
@@ -66,7 +66,7 @@ void                free_word_node(word_node *word);
 /* sentence_node ll functions */
 sentence_node*      get_sentence_head(sentence_node *sen_node);
 sentence_node*      get_sentence_tail(sentence_node *sen_node);
-sentence_node*      get_sentence_at_index(sentence_node **p_head, int index);
+sentence_node*      get_sentence_at_index(sentence_node **p_head, sentence_node **p_tail, int index);
 void                append_sentence_node(sentence_node **p_head, sentence_node **p_tail, sentence_node **p_to_be_added);
 void                delete_sentence_node(sentence_node **p_head, sentence_node **p_tail, sentence_node **p_to_be_deleted);
 // void                insert_sentence_node_at(sentence_node **p_head, sentence_node **p_tail, sentence_node **p_to_be_added, int idx);

@@ -1,4 +1,5 @@
 #include "../include/checkpointfile.h"
+#include "../include/file.h"
 
 char* get_checkpoint_file_name(char *file_name, int tag) {
     int file_name_len = strlen(file_name);

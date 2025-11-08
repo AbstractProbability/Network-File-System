@@ -1,0 +1,13 @@
+[Sat Nov  8 10:13:06 2025] [INFO] Name Server started
+[Sat Nov  8 10:13:06 2025] [INFO] Active users list initialized
+[Sat Nov  8 10:13:06 2025] [INFO] File path list initialized
+[Sat Nov  8 10:13:06 2025] [INFO] Listening for connections
+[Sat Nov  8 10:13:06 2025] [INFO] Entering event loop
+[Sat Nov  8 10:13:06 2025] [INFO] Heartbeat thread started
+[Sat Nov  8 10:13:18 2025] [DEBUG] Thread started for connection fd=5
+[Sat Nov  8 10:13:18 2025] [ERROR] Message type missing
+[Sat Nov  8 10:13:18 2025] [DEBUG] Thread started for connection fd=6
+[Sat Nov  8 10:13:18 2025] [DEBUG] Thread started for connection fd=7
+[Sat Nov  8 10:13:52 2025] [DEBUG] Thread started for connection fd=8
+[Sat Nov  8 10:13:52 2025] [ERROR] Message type missing
+[Sat Nov  8 10:13:52 2025] [DEBUG] Thread started for connection fd=9

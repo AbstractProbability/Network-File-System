@@ -18,6 +18,7 @@ typedef struct info_file {
 } info_file;
 
 void create_info_file(char *file_name, char *user_name);
+void delete_info_file(char *file_name);
 void update_access(char *file_name, char *username, char access_type);
 void remove_access(char *file_name, char *username, char access_type);
 void update_wc(char *file_name, int new_wc);

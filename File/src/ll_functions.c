@@ -80,7 +80,7 @@ word_node* get_word_at_index(word_node **p_head, word_node **p_tail, int index) 
             // No need to LOCK HERE, it changes the sentence that has 
             // already been locked.
             word_node *new_node = new_word_node(NULL);
-            append_word_node(p_head, p_tail, new_node);
+            append_word_node(p_head, p_tail, &new_node);
             return new_node;
         } else {
             // bad index
@@ -182,7 +182,7 @@ sentence_node* get_sentence_at_index(sentence_node **p_head, sentence_node **p_t
             // Need to GLOBAL LOCK HERE, it changes the sentence_package.
             // A global lock will be enabled whenever append takes place.
             sentence_node *new_node = new_sentence_node();
-            append_sentence_node(p_head, p_tail, new_node);         // crit sec access
+            append_sentence_node(p_head, p_tail, &new_node);         // crit sec access
             return new_node;
         } else {
             // bad index
