@@ -4,6 +4,7 @@
 #include <stdio.h> // used for perror
 #include <stdlib.h> // used for malloc, free, realloc
 #include <string.h> // used for memset, strcpy, strcmp
+#include <strings.h> // used for strcasecmp
 #include <unistd.h> // used for close
 #include <sys/socket.h> // used for socket functions
 #include <netinet/in.h> // used for sockaddr_in
