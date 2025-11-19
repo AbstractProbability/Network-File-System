@@ -1,0 +1,271 @@
+WORKING:
+
+client, server connecting
+heartbeat working
+Test the tokeniser: whitespace preservation, 
+when all ss are removed from file, file is removed or not? Yes
+If a ss connects and has a file that already currently exists, what happens: Simply added to the ss that have that file.
+(single and multi client write):
+Append logic is sound? Yes
+Insert logic is sound? Yes
+Multiple sentences, hanging las sentence (no punct): yes
+writing to invalid indices, appending to file without ending sentence punct (shouldnt be allowed)
+(multi client, same file):
+Append logic is sound? No
+Insert logic is sound? No
+Multiple sentences, hanging las sentence (no punct): No
+writing to invalid indices, appending to file without ending sentence punct (shouldnt be allowed)
+if a user is in the process of locking, and someone commits?
+Test the writes: multiple writes, multiple writes with multiple reads
+
+Ns persistent client list
+Ns persistent request list
+
+file access operations
+undo
+small filename cache
+
+CHECK:
+Does ss connect and send its files to the ns?
+writing to empty file? 
+(Multi client, multi file):
+addaccess, remaccess, reqaccess, reqlist, approve, reject
+delete working for undo, checkpoint file?
+File modification/read happens during stream?
+Info file updating correctly?
+Create working correctly?
+
+NOT DONE:
+heartbeat is not handling correctly in the case of ss crash (ctrl-c is not an ss crash apparently). I.e. the timeout is not handled properly. However this should still be ok for system crashes/ power off etc, in any cases where the ss sockets get closed. FIX: add timestamp checking for last heartbeat received and the current time.
+SS labelling
+
+
+Minor issues:
+-> write always adds a space at the end unless there is a delimiter. Increases clarity of words but kinda violates wysiwyg.
+-> write permission does not auto imply read, maybe the same is true for exec also?
+-> Ok so the move operation is like move <file_path> <folder_name>. So the file from file_path would be taken and put in folder_name. So if a file was dir1/dir2/filename then move dir1/dir2/filename dir3/dir4 would put filename in dir3/dir4 and its file path would become dir3/dir4/filename. HOWEVER this allows for renaming the file.
+-> infofile is not synced under reads.
+
+
+l_insert 1 testing commit. by oth.er client?
+
+multiple. sentences. inserted. will it. handle. sentence 1.
+sentence does. this. work. 2.
+sentence 3.
+sentence 4.
+sentence 5.
+sentence 6.
+sentence 6.
+sentence 8.
+sentence 9.
+sentence 10.
+
+sentence 3.
+sentence 4.
+sentence 5.
+sentence 6.
+sentence 6.
+sentence 8.
+sentence 9.
+sentence 10.
+
+Backup:
+1. Make sure that after an ss goes down and comes back up, its able to re sync correctly. Currently, for some reason, when an ss goes down, and a file has no ss backing it, the file is correctly not shown on the client side view request. However, it must be ensured that the file is also removed from the file indexing. Right now, when the ss comes back up, view always works. But sometimes read <filepath> works and sometimes it says file not found on any ss, even though an ss backing it is up, and it is visible on view command. Also is the case with info file. Sometimes info command returns stale info (before server went down info) and sometimes it correctly syncs after the ss comes back up.
+
+Backup idea:
+Empty ss (no files/dirs in file_dir). Also known as potential backup ss, until it becomes a regular ss or backup ss.
+Non-empty ss: an ss which is not an empty ss. Also known as regular ss.
+Each ss has a flag: backed_up. 
+
+Now when a regular ss connects it has its backed_up false. When an empty ss connects, it is called a potential backup ss. If there are any ss with their backed_up false, then this empty ss becomes the backup ss for one of them. If there is no ss with backed_up false, then the empty ss becomes a regular ss.
+
+The regularity/backing up etc. is only within an ns session. So ss_2 is a backup for ss_1 only for the duration that the ns is up. After ns goes down and the ss_1 and ss_2 connect again, THEY NEED NOT BE BACKUPS OF EACH OTHER, EVEN IF THEY CONNECT ONE AFTER THE OTHER. For example, if ss_1 backed up its data into ss_2 in the first session, then ss_2 would join the second ns session as a non-empty ss so these would not be bcakups of each other. HOWEVER in the file indexing, a their common files will still have both of their data. If the files are different, it is arbitrary whose info file is used and whose data is given to the client. This is done in order to simplify the cases where in session 1, ss1 goes down -> file is updarted in ss_2 -> data is never re-updated in ss_1. So in session 2, the same file path will have different contents for each of them. So it can be arbotrarily chosen which ones info file is taken and which ones data is taken. It need not be the one with the latest info/data.
+
+A server and its backup store the EXACT SAME DATA as much as possible. SO initially, when an empty ss becomes a backup ss for a regular one, all content in the regular one is replicated to the backup by a direct connection between them. Whenever a write/undo/create/info file update/createfolder etc... happens in either of them, it is synced to the other. In a session, an ss stores its backup's ip and port, and the backup stores its parent's ip and port. So that if one goes down, the other can keep serving and when the ss comes back up, the changes are synced across each other.
+
+Also note that if an ss or its backup goes down, then it makes its backed_up false for the one that is up. SUppose before the downed ss comes up, another empty ss is connecting, then the currently alive ss does become a candidate for being selected to back up with the new empty ss. In this case, the alive ss, if selected, will become the parent ss for the new ss and the new ss backs up this ss. It doesnt matter if the alive ss was originally a regular ss or a empty ss. Now in case this does happen, and the ss that went down comes back up, then that ss simply becomes a new regular (or empty) ss connecting to the ns.
+
+Note that the difference between "backup ss" and corresponding "parent ss" is blurred after the initial full sync. Each ss thinks that the other is "backing me up". If a change happens on one, it is replicated on the other. If the one that went down comes back up, then a re-sync happens. This is reflected in the above scenario also, when one of the ss goes down, the alive one doesnt think of itself as "I am the backup so I should wait for my parent" or "I am the parent so i can choose someone else to back me up". Its more like "My backup went down, I will recognise him when he comes up, but if another potential backer comes and I am selected, I wont deny the offer."
+
+A little more clarification:
+If a partner goes down, there are 2 paths for the survivor:
+partner down -> partner up before an empty ss comes: Then re-sync with partner, because you know the partner (you stored their port and ip.)
+partner down -> empty ss comes before partner: Then if you are chosen to pair with the empty ss, you take the chance and pair with it. You abandon your old partner. If you are not chosen to pair with the empty ss, you wait until you are chosen to pair with some empty ss or your partner comes back up.
+
+Answers to your questions.:
+1. Ns tells them to connect. Ns handles pairing up ss, reconnecting an ss with its partner that went down, etc... However, ns does not transfer data from ss to its backup (except maybe the initial connection confirmations/formalities.) The partners have to maintain a connection between them and back each other up.
+2. Whichever is most robust, does not cause any violation with the currently existing communications and operations.
+3. When an ss reconnects after going down, it obviously has lost info of its partner. However, its partner still has info of it. So the ns goes over all the current ss with no partners, and checks if their ip and port are matching with the new ss that just came up. If it is, it makes them connect and re-sync.
+4. Backup assignment is arbitrary. You may implement the simplest mechanism (fifo, random, arbitrary) whichever is simpler. It should just be ensured that if there is atleast one regular, non-partnered ss, and there enters an empty non-partnered ss, then the empty non-partnered ss becomes a backup for exactly one of the regular non-partnered ss. A newly entering empty ss should not become regular unless all previously connected ss have a partner.
+
+Confirm your understanding. Do not start implementing anything yet. Ask questions if there are still doubts.
+
+1. SS-to-SS connection setup: When NS pairs two SS, it Send both SS each other's IP+port, and they establish connection themselves.
+2. Ongoing sync mechanism: When regular SS receives a WRITE/CREATE/etc from NS, it should Complete operation, then send sync message to partner over their private connection.
+3. re-sync details: When partner reconnects survivor sends list of all changed files since disconnect. Make this even simpler by just making the survivor re-sync all the files to the reconnected partner, instead of trying to search through differences. So the inital sync and the re sync are basically the same, only thing that differ is the context in which they happen. Also, the survivor initiates the re-sync.
+4. SS file_dir check: How does NS determine if SS is empty? Answer: SS sends is_empty flag in SS_Info_Packet (this already exists in code)
+5. backed_up flag: this should be Stored in SSInfo structure on NS side.
+6. Multiple empty SS arrive: If 2 empty SS connect before any regular ones, then the first one that connected, connected at a time when no ss needed a partner (or all ss had a partner). So this one would become a regular. Then the next empty ss connects and partners up with this one. So at any point in time, there are no 'empty ss'. They immediately get converted to regular/backup based on the ss that are there before them.
+
+Confirm your understanding. Do not start implementing anything yet. Ask questions if there are still doubts.
+
+Your understanding is quite correct.
+1. SS-to-SS connection port: Should SS listen on another port for partner connections, or use the same client_port? Use a different port for listening to the partner.
+2. Sync socket persistence: Should this be:
+Single bidirectional socket (either can send sync commands)?
+Or two sockets (each SS connects to the other)? Answer: Upto you. Whichever is less complicated and properly prevents deadlocks and races.
+3. Which SS initiates initial sync: When NS pairs empty+regular:
+Empty connects to regular and requests files?
+Regular connects to empty and pushes files?
+Or NS tells one to connect to other? Answer: Ns tells regular to connect to empty and tells regular to push its contents to empty. Similarly for a partner going down: ns tells the survivor to push all its content to the partner that had gone down.
+
+Alright. Please make an md file detailing the usage instructions: Starting the ns, ss, client, all ways to do this starting, and client commands usage. Please write in as much detail as possible. Look through the code to find correct usage.
+
+El Plan:
+Folder
+
+Bss
+
+
+NS logs: ./nameserver
+NS: Loaded all_users list
+NS: Loaded access requests
+Name Server initializing...
+Name Server listening on port 8080
+Storage Server 'ss1_root' connected from 127.0.0.1:33323 (empty: 0, update_port: 33614, backup_port: 39065)
+NS: Receiving file index from SS ss1_root...
+NS: Update socket initialized for SS 127.0.0.1
+NS: Indexing new file 'bobfile' from SS 127.0.0.1 (Owner: bob)
+NS: Indexing new file 'emptydir/newdir/alicefile3' from SS 127.0.0.1 (Owner: alice)
+NS: Indexing new file 'emptydir/alicefile' from SS 127.0.0.1 (Owner: alice)
+NS: Indexing new file 'alicedir/alicefule' from SS 127.0.0.1 (Owner: alice)
+NS: Indexing new file 'alicedir/alicefile' from SS 127.0.0.1 (Owner: alice)
+NS: Indexing new file 'alicedir/alicefile2' from SS 127.0.0.1 (Owner: alice)
+NS: Indexing new file 'test_script.sh' from SS 127.0.0.1 (Owner: alice)
+NS: File index sync complete for SS ss1_root.
+NS: Regular SS 'ss1_root' registered, waiting for empty SS to pair with
+NS: SS ss1_root command session initialized.
+NS: Heartbeat ACK from SS 127.0.0.1
+NS: Heartbeat ACK from SS 127.0.0.1
+NS: Heartbeat ACK from SS 127.0.0.1
+Storage Server 'ss2_root' connected from 127.0.0.1:45417 (empty: 1, update_port: 45498, backup_port: 54437)
+NS: Paired SS 'ss1_root' with SS 'ss2_root' for backup
+NS: Update socket initialized for SS 127.0.0.1
+NS: Sent pair command to SS 'ss1_root' -> partner 'ss2_root' (127.0.0.1:54437)
+NS: SS ss2_root command session initialized.
+NS: SS 'ss1_root' reported partner disconnect
+NS: Unknown opcode 1597141875 from SS 127.0.0.1
+NS: Unknown opcode 1953460082 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Unknown opcode 0 from SS 127.0.0.1
+NS: Heartbeat ACK from SS 127.0.0.1
+NS: Heartbeat ACK from SS 127.0.0.1
+NS: Heartbeat ACK from SS 127.0.0.1
+NS: Heartbeat ACK from SS 127.0.0.1
+
+SS1 logs: ./storageserver tmp/ss1_root 9001
+SS: Verified directory structure at tmp/ss1_root
+SS: Backup listener started on port 39065
+SS: Backup listener thread started
+SS: Client listener started on port 33323
+SS: Connecting to NS at 127.0.0.1:8080...
+SS: Command socket connected to Name Server.
+SS: Update socket connected to Name Server.
+SS: Sent info packet to NS (name: ss1_root, client_port: 33323, backup_port: 39065, update_port: 33614, empty: 0)
+SS: Syncing file: bobfile
+SS: Syncing file: emptydir/newdir/alicefile3
+SS: Syncing file: emptydir/alicefile
+SS: Syncing file: alicedir/alicefule
+SS: Syncing file: alicedir/alicefile
+SS: Syncing file: alicedir/alicefile2
+SS: Syncing file: test_script.sh
+SS: File sync complete.
+SS: Registered with NS. Listening for commands.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received pair command - partner 'ss2_root' at 127.0.0.1:54437
+SS: Connecting to partner ss2_root at 127.0.0.1:54437
+SS: Connected to partner, starting sync handler
+SS: Starting full sync to partner
+SS: Partner sync handler started
+SS: Full sync to partner complete
+SS: Partner disconnected during sync
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+
+SS2 logs: ./storageserver tmp/ss2_root 9002
+SS: Verified directory structure at tmp/ss2_root
+SS: Backup listener started on port 54437
+SS: Backup listener thread started
+SS: Client listener started on port 45417
+SS: Connecting to NS at 127.0.0.1:8080...
+SS: Command socket connected to Name Server.
+SS: Update socket connected to Name Server.
+SS: Sent info packet to NS (name: ss2_root, client_port: 45417, backup_port: 54437, update_port: 45498, empty: 1)
+SS: Registered with NS. Listening for commands.
+SS: Unexpected partner connection from ss1_root, rejecting
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+
+As you can see, SS1 thinks ss2 disconnected during sync, and ss2 was not expecting that connection, and rejected it. Neither went down. Also ns then receives a bunch of opcodes with opcode some garbage and a bunch of other opcodes with opcode 0. I do not know which ss these are from. Please fix these issues, the backup is not happening correctly. Also make the logging in ns such that it displays the ss name with every ss log. And client name with every client log.
