@@ -45,6 +45,7 @@ Minor issues:
 -> write permission does not auto imply read, maybe the same is true for exec also?
 -> Ok so the move operation is like move <file_path> <folder_name>. So the file from file_path would be taken and put in folder_name. So if a file was dir1/dir2/filename then move dir1/dir2/filename dir3/dir4 would put filename in dir3/dir4 and its file path would become dir3/dir4/filename. HOWEVER this allows for renaming the file.
 -> infofile is not synced under reads.
+-> View takes any kind of flag but only parses l and a
 
 
 l_insert 1 testing commit. by oth.er client?
@@ -120,11 +121,6 @@ Regular connects to empty and pushes files?
 Or NS tells one to connect to other? Answer: Ns tells regular to connect to empty and tells regular to push its contents to empty. Similarly for a partner going down: ns tells the survivor to push all its content to the partner that had gone down.
 
 Alright. Please make an md file detailing the usage instructions: Starting the ns, ss, client, all ways to do this starting, and client commands usage. Please write in as much detail as possible. Look through the code to find correct usage.
-
-El Plan:
-Folder
-
-Bss
 
 
 NS logs: ./nameserver
@@ -269,3 +265,335 @@ SS: Received heartbeat from NS.
 SS: Received heartbeat from NS.
 
 As you can see, SS1 thinks ss2 disconnected during sync, and ss2 was not expecting that connection, and rejected it. Neither went down. Also ns then receives a bunch of opcodes with opcode some garbage and a bunch of other opcodes with opcode 0. I do not know which ss these are from. Please fix these issues, the backup is not happening correctly. Also make the logging in ns such that it displays the ss name with every ss log. And client name with every client log.
+
+one command is attempted to be executed by the client even after the ns has gone down. Why. For example, after ns goes down, view works, and something like read tries redirecting client to ss, but ss itself is not there so i think this is why this fails. But after ns shuts down how is it able to serve?
+
+SS: Client connected for OP 20 on bobfile
+SS: Client acquiring read lock for 'bobfile'
+SS: Client acquired read lock.
+SS: Client released read lock.
+SS: Updated info file for 'bobfile' (size: 216, words: 41, chars: 216, modified: 0)
+SS: Sent info update to NS for 'bobfile'
+SS: Client operation complete on socket 6.
+SS: Received CREATE for V���]x by 
+SS: Updated info file for 'V���]x' (size: 0, words: 0, chars: 0, modified: 1)
+SS: Received heartbeat from NS.
+SS: Received UPDATE_INFO for bobfile
+SS: Info file updated for 'bobfile'
+SS: Received unknown command from NS: 1634956320
+SS: Received unknown command from NS: 1097032549
+SS: Received unknown command from NS: 1936924704
+SS: Received unknown command from NS: 538976288
+SS: Received unknown command from NS: -238693985
+SS: Received unknown command from NS: 1568145408
+SS: Received unknown command from NS: 538976288
+SS: Received unknown command from NS: 545000060
+SS: Received unknown command from NS: 603979776
+SS: Received CREATE for �U�rzd by P���]x
+SS: Updated info file for '�U�rzd' (size: 0, words: 0, chars: 0, modified: 1)
+SS: Received unknown command from NS: -979411592
+SS: Received unknown command from NS: 49221
+SS: Received unknown command from NS: -526426760
+SS: Received CREATE for  by ������
+SS: Received unknown command from NS: 1568145408
+SS: Received unknown command from NS: -949696865
+SS: Received unknown command from NS: 1568145408
+SS: Received unknown command from NS: 671088640
+SS: Received unknown command from NS: 805306368
+SS: Received unknown command from NS: 1620623261
+SS: Received unknown command from NS: 1568145408
+SS: Received unknown command from NS: -1600667747
+SS: Received unknown command from NS: 1568145408
+SS: Received unknown command from NS: 6611321
+SS: Received unknown command from NS: 168421915
+SS: Received CREATE for  by 
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received UPDATE_INFO for bobfile
+SS: Info file updated for 'bobfile'
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received CREATE for megabobfile by bob
+SS: Updated info file for 'megabobfile' (size: 0, words: 0, chars: 0, modified: 1)
+SS: Received GET_INFO for megabobfile
+SS: Sent info for 'megabobfile' to NS
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received UPDATE_INFO for megabobfile
+SS: Info file updated for 'megabobfile'
+SS: Received CREATE for  by 
+SS: Received CREATE for  by 
+SS: Client connected for OP 20 on megabobfile
+SS: Loading file 'megabobfile' into memory.
+SS: Client acquiring read lock for 'megabobfile'
+SS: Client acquired read lock.
+SS: Client released read lock.
+SS: Updated info file for 'megabobfile' (size: 0, words: 0, chars: 0, modified: 0)
+SS: Sent info update to NS for 'megabobfile'
+SS: Client operation complete on socket 9.
+SS: Received CREATE for  by 
+SS: Received heartbeat from NS.
+
+Issues:
+NS: LRU Cache INVALIDATED 'alicefile'
+NS: LRU Cache INVALIDATED 'alicefile'
+why is lru cache invalidated twice after read or write
+
+Ok. Now the issue with an ss and a backup connecting to it is happening. Refer to the logs below to see the issue. The backup just refused the request multiple times.
+
+Backup:
+1. When ss comes back up, does it re sync its files properly?
+2. One ss, and one backup
+
+
+ns logs:
+...
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+Storage Server 'ss5_root' connected from 10.1.39.39:42501 (empty: 1, update_port: 48524, backup_port: 55603)
+NS: Paired SS 'ss1_root' with SS 'ss5_root' for backup
+NS: Update socket initialized for SS 'ss5_root'
+NS: Sent pair command to SS 'ss5_root' -> partner 'ss1_root' (10.1.39.39:50121), should_send_sync=0
+NS: Sent pair command to SS 'ss1_root' -> partner 'ss5_root' (10.1.39.39:55603), should_send_sync=1
+NS: Adding partner 'ss5_root' to all files of 'ss1_root'
+NS: Added partner to 11 files
+NS: SS ss5_root command session initialized.
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+
+ss5 logs:
+akshat-gupta$ ./storageserver tmp/ss5_root 10.1.39.41 8080
+SS: Verified directory structure at tmp/ss5_root
+SS: Backup listener started on port 55603
+SS: Backup listener thread started
+SS: Client listener started on port 42501
+SS: Connecting to NS at 10.1.39.41:8080...
+SS: Command socket connected to Name Server.
+SS: Update socket connected to Name Server.
+SS: Sent info packet to NS (name: ss5_root, client_port: 42501, backup_port: 55603, update_port: 48524, empty: 1)
+SS: Registered with NS. Listening for commands.
+SS: Unexpected partner connection from ss1_root, rejecting
+SS: Unexpected partner connection from ss1_root, rejecting
+SS: Unexpected partner connection from ss1_root, rejecting
+SS: Unexpected partner connection from ss1_root, rejecting
+SS: Unexpected partner connection from ss1_root, rejecting
+
+ss1 logs:
+akshat-gupta$ ./storageserver tmp/ss1_root 10.1.39.41 8080
+SS: Verified directory structure at tmp/ss1_root
+SS: Backup listener started on port 50121
+SS: Backup listener thread started
+SS: Client listener started on port 43379
+SS: Connecting to NS at 10.1.39.41:8080...
+SS: Command socket connected to Name Server.
+SS: Update socket connected to Name Server.
+SS: Sent info packet to NS (name: ss1_root, client_port: 43379, backup_port: 50121, update_port: 43960, empty: 0)
+SS: Syncing file: test_script.sh
+SS: Syncing file: alicedir/alicefule
+SS: Syncing file: alicedir/alicefile
+SS: Syncing file: alicedir/alicefile2
+SS: Syncing file: bobfile
+SS: Syncing file: alicefile
+SS: Syncing file: emptydir/newdir/alicefile3
+SS: Syncing file: emptydir/alicefile
+SS: Syncing file: emptydir/alicefile1
+SS: Syncing file: non
+SS: Syncing file: bob2
+SS: File sync complete.
+SS: Registered with NS. Listening for commands.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received pair command - partner 'ss5_root' at 10.1.39.39:55603, should_send_sync=1
+SS: I am initiator (name 'ss1_root' < 'ss5_root'), connecting to partner
+SS: Connecting to partner ss5_root at 10.1.39.39:55603
+SS: Partner rejected connection, will retry
+SS: Retry 2/5 connecting to partner (delay 100ms)...
+SS: Partner rejected connection, will retry
+SS: Retry 3/5 connecting to partner (delay 200ms)...
+SS: Partner rejected connection, will retry
+SS: Retry 4/5 connecting to partner (delay 400ms)...
+SS: Partner rejected connection, will retry
+SS: Retry 5/5 connecting to partner (delay 800ms)...
+SS: Partner rejected connection, will retry
+SS: Failed to connect to partner after 5 attempts
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Connection to Name Server lost.
+
+ns logs:
+NS: Loaded all_users list
+NS: Loaded access requests
+Name Server initializing...
+Name Server listening on port 8080
+Storage Server 'ss1_root' connected from 10.1.39.39:44995 (empty: 0, update_port: 54524, backup_port: 52917)
+NS: Receiving file index from SS ss1_root...
+NS: Indexing new file 'test_script.sh' from SS 10.1.39.39 (Owner: alice)
+NS: Indexing new file 'alicedir/alicefule' from SS 10.1.39.39 (Owner: alice)
+NS: Update socket initialized for SS 'ss1_root'
+NS: Indexing new file 'alicedir/alicefile' from SS 10.1.39.39 (Owner: alice)
+NS: Indexing new file 'alicedir/alicefile2' from SS 10.1.39.39 (Owner: alice)
+NS: Indexing new file 'bobfile' from SS 10.1.39.39 (Owner: bob)
+NS: Indexing new file 'alicefile' from SS 10.1.39.39 (Owner: alice)
+NS: Indexing new file 'emptydir/newdir/alicefile3' from SS 10.1.39.39 (Owner: alice)
+NS: Indexing new file 'emptydir/alicefile' from SS 10.1.39.39 (Owner: alice)
+NS: Indexing new file 'emptydir/alicefile1' from SS 10.1.39.39 (Owner: alice)
+NS: Indexing new file 'non' from SS 10.1.39.39 (Owner: alice)
+NS: Indexing new file 'bob2' from SS 10.1.39.39 (Owner: bob)
+NS: File index sync complete for SS ss1_root.
+NS: Regular SS 'ss1_root' registered, waiting for empty SS to pair with
+NS: SS ss1_root command session initialized.
+NS: Heartbeat ACK from SS 'ss1_root'
+Client 'alice' connected.
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+Storage Server 'ss5_root' connected from 10.1.39.39:40327 (empty: 1, update_port: 44672, backup_port: 32787)
+NS: Paired SS 'ss1_root' with SS 'ss5_root' for backup
+NS: Update socket initialized for SS 'ss5_root'
+NS: Sent pair command to SS 'ss5_root' -> partner 'ss1_root' (10.1.39.39:52917), should_send_sync=0 (ack: OK)
+NS: Sent pair command to SS 'ss1_root' -> partner 'ss5_root' (10.1.39.39:32787), should_send_sync=1 (ack: OK)
+NS: Adding partner 'ss5_root' to all files of 'ss1_root'
+NS: Added partner to 11 files
+NS: SS ss5_root command session initialized.
+NS: Heartbeat ACK from SS 'ss5_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss5_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss5_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss5_root'
+NS: Heartbeat ACK from SS 'ss5_root'
+NS: Heartbeat ACK from SS 'ss5_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss1_root'
+NS: Heartbeat ACK from SS 'ss5_root'
+
+ss5 logs:
+akshat-gupta$ ./storageserver tmp/ss5_root 10.1.39.41 8080
+SS: Verified directory structure at tmp/ss5_root
+SS: Backup listener started on port 32787
+SS: Backup listener thread started
+SS: Client listener started on port 40327
+SS: Connecting to NS at 10.1.39.41:8080...
+SS: Command socket connected to Name Server.
+SS: Update socket connected to Name Server.
+SS: Sent info packet to NS (name: ss5_root, client_port: 40327, backup_port: 32787, update_port: 44672, empty: 1)
+SS: Registered with NS. Listening for commands.
+SS: Received pair command - partner 'ss1_root' at 10.1.39.39:52917, should_send_sync=0
+SS: I am receiver (name 'ss5_root' > 'ss1_root'), waiting for partner to connect
+SS: Partner ss1_root connected for sync
+SS: Partner sync handler started
+SS: [SYNC] Received file from partner: test_script.sh (208 bytes)
+SS: [SYNC] Received CREATEFOLDER: alicedir
+SS: [SYNC] Received file from partner: alicedir/alicefule (0 bytes)
+SS: [SYNC] Received file from partner: alicedir/alicefile (20 bytes)
+SS: [SYNC] Received file from partner: alicedir/alicefile2 (0 bytes)
+SS: [SYNC] Received file from partner: bobfile (239 bytes)
+SS: [SYNC] Received CREATEFOLDER: max
+SS: [SYNC] Received file from partner: alicefile (110 bytes)
+SS: [SYNC] Received CREATEFOLDER: emptydir
+SS: [SYNC] Received CREATEFOLDER: emptydir/newdir
+SS: [SYNC] Received file from partner: emptydir/newdir/alicefile3 (0 bytes)
+SS: [SYNC] Received file from partner: emptydir/alicefile (97 bytes)
+SS: [SYNC] Received file from partner: emptydir/alicefile1 (0 bytes)
+SS: [SYNC] Received file from partner: non (110 bytes)
+SS: [SYNC] Received file from partner: bob2 (102 bytes)
+SS: Unknown sync opcode 150994944
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+
+ss1 logs:
+akshat-gupta$ ./storageserver tmp/ss1_root 10.1.39.41 8080
+SS: Verified directory structure at tmp/ss1_root
+SS: Backup listener started on port 52917
+SS: Backup listener thread started
+SS: Client listener started on port 44995
+SS: Connecting to NS at 10.1.39.41:8080...
+SS: Command socket connected to Name Server.
+SS: Update socket connected to Name Server.
+SS: Sent info packet to NS (name: ss1_root, client_port: 44995, backup_port: 52917, update_port: 54524, empty: 0)
+SS: Syncing file: test_script.sh
+SS: Syncing file: alicedir/alicefule
+SS: Syncing file: alicedir/alicefile
+SS: Syncing file: alicedir/alicefile2
+SS: Syncing file: bobfile
+SS: Syncing file: alicefile
+SS: Syncing file: emptydir/newdir/alicefile3
+SS: Syncing file: emptydir/alicefile
+SS: Syncing file: emptydir/alicefile1
+SS: Syncing file: non
+SS: Syncing file: bob2
+SS: File sync complete.
+SS: Registered with NS. Listening for commands.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received pair command - partner 'ss5_root' at 10.1.39.39:32787, should_send_sync=1
+SS: I am initiator (name 'ss1_root' < 'ss5_root'), connecting to partner
+SS: Connecting to partner ss5_root at 10.1.39.39:32787
+SS: Successfully connected to partner
+SS: Connected to partner, starting sync handler
+SS: Sending full sync to partner (instructed by NS)
+SS: Starting full sync to partner
+SS: Partner sync handler started
+SS: Synced file: test_script.sh (208 bytes)
+SS: Syncing folder: alicedir
+SS: Synced file: alicedir/alicefule (0 bytes)
+SS: Synced file: alicedir/alicefile (20 bytes)
+SS: Synced file: alicedir/alicefile2 (0 bytes)
+SS: Synced file: bobfile (239 bytes)
+SS: Syncing folder: max
+SS: Synced file: alicefile (110 bytes)
+SS: Syncing folder: emptydir
+SS: Syncing folder: emptydir/newdir
+SS: Synced file: emptydir/newdir/alicefile3 (0 bytes)
+SS: Synced file: emptydir/alicefile (97 bytes)
+SS: Synced file: emptydir/alicefile1 (0 bytes)
+SS: Synced file: non (110 bytes)
+SS: Synced file: bob2 (102 bytes)
+SS: Full sync to partner complete
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+SS: Received heartbeat from NS.
+
+
+Now the initial sync happens, but there is an unknown opcode on the ss5 logs
+
+SS logs back in, backup exists, but it doenst appear in file indexing.
+

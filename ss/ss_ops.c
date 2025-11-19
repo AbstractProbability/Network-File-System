@@ -1,4 +1,5 @@
 #include "ss.h"
+#include "../include/serialize.h"
 #include <time.h>
 #include <ctype.h>
 #include <string.h>
@@ -71,6 +72,8 @@ void update_info_file(const char* path, const char* username, int update_modifie
     char owner[MAX_USERNAME_LEN] = "unknown";
     time_t created = time(NULL);
     time_t modified = time(NULL);
+    time_t old_last_accessed = 0;
+    char old_last_accessed_by[MAX_USERNAME_LEN] = "";
     char read_access[1024] = "";
     char write_access[1024] = "";
     char exec_access[1024] = "";
@@ -82,6 +85,8 @@ void update_info_file(const char* path, const char* username, int update_modifie
             if (sscanf(line, "owner: %s", owner) == 1) continue;
             if (sscanf(line, "created: %ld", &created) == 1) continue;
             if (sscanf(line, "modified: %ld", &modified) == 1) continue;
+            if (sscanf(line, "last_accessed: %ld", &old_last_accessed) == 1) continue;
+            if (sscanf(line, "last_accessed_by: %s", old_last_accessed_by) == 1) continue;
             
             // Parse access lists
             if (strncmp(line, "read_access: ", 13) == 0) {
@@ -153,9 +158,19 @@ void update_info_file(const char* path, const char* username, int update_modifie
         }
         
         // ALWAYS update last_accessed for any operation
-        if (username != NULL) {
+        // Use current username if provided, otherwise preserve old value
+        if (username != NULL && strlen(username) > 0) {
             fprintf(info_file, "last_accessed: %ld\n", now);
             fprintf(info_file, "last_accessed_by: %s\n", username);
+            printf("SS: INFO UPDATE - Setting last_accessed=%ld, last_accessed_by=%s\n", now, username);
+        } else if (old_last_accessed > 0) {
+            // Preserve old values if no new username provided
+            fprintf(info_file, "last_accessed: %ld\n", old_last_accessed);
+            if (strlen(old_last_accessed_by) > 0) {
+                fprintf(info_file, "last_accessed_by: %s\n", old_last_accessed_by);
+            }
+            printf("SS: INFO UPDATE - Preserving old last_accessed=%ld, last_accessed_by=%s (username was NULL/empty)\n", 
+                   old_last_accessed, old_last_accessed_by);
         }
         
         fprintf(info_file, "size: %ld\n", size);
@@ -205,18 +220,19 @@ void send_info_update_to_ns(const char* path) {
     
     // Send update to NS on update socket
     SSOpCode opcode = SS_NS_UPDATE_INFO;
-    send(g_config.update_sock, &opcode, sizeof(SSOpCode), 0);
+    SEND_OPCODE(g_config.update_sock, opcode);
     
     // Send path
     char path_buf[MAX_PATH_LEN];
     memset(path_buf, 0, sizeof(path_buf));
     strncpy(path_buf, path, MAX_PATH_LEN - 1);
-    send(g_config.update_sock, path_buf, MAX_PATH_LEN, 0);
+    send_full(g_config.update_sock, path_buf, MAX_PATH_LEN);
     
     // Send info content
-    send(g_config.update_sock, info_content, MAX_INFO_LEN, 0);
+    send_full(g_config.update_sock, info_content, MAX_INFO_LEN);
     
     printf("SS: Sent info update to NS for '%s'\n", path);
+    printf("SS: Info content sent:\n%s\n", info_content);
 }
 
 
@@ -614,6 +630,8 @@ void handle_op_read(int sock, ClientRequest* req) {
     char file_path[MAX_PATH_LEN * 2];
     get_full_path("file_dir", req->path, file_path);
     
+    printf("SS: READ operation for '%s' by user '%s'\n", req->path, req->username);
+    
     OpenFile* file = get_open_file(req->path);
     if (file == NULL) {
         char* err_msg = "Error: File not found on this SS.";
@@ -666,7 +684,7 @@ void handle_op_write(int sock, ClientRequest* req) {
     OpenFile* file = get_open_file(req->path);
     if (file == NULL) {
         res.status = ERR_FILE_NOT_FOUND;
-        send(sock, &res, sizeof(ServerResponse), 0);
+        SEND_SERVER_RESPONSE(sock, &res);
         return;
     }
 
@@ -690,7 +708,7 @@ void handle_op_write(int sock, ClientRequest* req) {
                 pthread_rwlock_unlock(&file->global_lock);
                 res.status = (s0 == NULL) ? ERR_INDEX_OUT_OF_BOUNDS : ERR_ACCESS_DENIED;
                 sprintf(res.message, "Error: Cannot append to sentence %d.", sentence_index);
-                send(sock, &res, sizeof(ServerResponse), 0);
+                SEND_SERVER_RESPONSE(sock, &res);
                 return;
             }
             
@@ -708,7 +726,7 @@ void handle_op_write(int sock, ClientRequest* req) {
         pthread_mutex_unlock(&s_locked->lock);
         res.status = ERR_SENTENCE_LOCKED;
         sprintf(res.message, "Error: Sentence %d is locked by %s", sentence_index, s_locked->lock_holder_username);
-        send(sock, &res, sizeof(ServerResponse), 0);
+        SEND_SERVER_RESPONSE(sock, &res);
         return;
     }
     s_locked->lock_holder_username = strdup(req->username);
@@ -718,13 +736,13 @@ void handle_op_write(int sock, ClientRequest* req) {
     char* sentence_content = serialize_sentence(s_locked);
     res.status = ERR_OK;
     snprintf(res.message, MAX_BUFFER_LEN, "Sentence %d locked. Content: %s", sentence_index, sentence_content);
-    send(sock, &res, sizeof(ServerResponse), 0);
+    SEND_SERVER_RESPONSE(sock, &res);
     free(sentence_content);
 
     // --- PHASE 2: WAIT FOR COMMIT ---
     
     ClientWritePacket write_pkt;
-    if (recv(sock, &write_pkt, sizeof(ClientWritePacket), 0) <= 0) {
+    if (RECV_CLIENT_WRITE_PACKET(sock, &write_pkt) <= 0) {
         printf("SS: Client disconnected before committing.\n");
         // Release the lock
         pthread_mutex_lock(&s_locked->lock);
@@ -768,7 +786,7 @@ void handle_op_write(int sock, ClientRequest* req) {
         pthread_rwlock_unlock(&file->global_lock);
         res.status = ERR_ACCESS_DENIED;
         sprintf(res.message, "Error: Could not find locked sentence. Commit aborted.");
-        send(sock, &res, sizeof(ServerResponse), 0);
+        SEND_SERVER_RESPONSE(sock, &res);
         return;
     }
 
@@ -818,7 +836,7 @@ void handle_op_write(int sock, ClientRequest* req) {
         res.status = commit_status;
         sprintf(res.message, "Error: Commit to disk failed.");
     }
-    send(sock, &res, sizeof(ServerResponse), 0);
+    SEND_SERVER_RESPONSE(sock, &res);
 }
 // --- END WRITE Operation ---
 
@@ -838,7 +856,7 @@ void handle_op_stream(int sock, ClientRequest* req) {
         if (f == NULL) {
             res.status = ERR_FILE_NOT_FOUND;
             sprintf(res.message, "Error: File not found.");
-            send(sock, &res, sizeof(ServerResponse), 0);
+            SEND_SERVER_RESPONSE(sock, &res);
             return;
         }
         
@@ -854,7 +872,7 @@ void handle_op_stream(int sock, ClientRequest* req) {
         
         // Send success status first
         res.status = ERR_OK;
-        send(sock, &res, sizeof(ServerResponse), 0);
+        SEND_SERVER_RESPONSE(sock, &res);
         
         // Stream the content word by word
         stream_content_to_client(sock, content);
@@ -871,7 +889,7 @@ void handle_op_stream(int sock, ClientRequest* req) {
         
         // Send success status
         res.status = ERR_OK;
-        send(sock, &res, sizeof(ServerResponse), 0);
+        SEND_SERVER_RESPONSE(sock, &res);
         
         // Now stream the copied content (lock is released)
         stream_content_to_client(sock, content);
@@ -881,6 +899,9 @@ void handle_op_stream(int sock, ClientRequest* req) {
     
     // Update access time
     update_info_file(req->path, req->username, 0);
+    
+    // Send updated info to NS
+    send_info_update_to_ns(req->path);
 }
 
 // Helper function to stream content word-by-word with 0.1s delay
@@ -1532,10 +1553,31 @@ ErrorCode handle_op_revert(const char* path, const char* checkpoint_tag, const c
 
 // --- LIST CHECKPOINTS Operation ---
 void handle_op_listcheckpoints(int sock, const char* path) {
-    char checkpoint_dir[MAX_PATH_LEN * 2];
-    snprintf(checkpoint_dir, sizeof(checkpoint_dir), "%s/checkpoint_dir", g_config.root_dir);
+    // Build full checkpoint path including directory structure
+    char checkpoint_base_path[MAX_PATH_LEN * 3];  // Increased buffer size
     
-    DIR* dir = opendir(checkpoint_dir);
+    // For nested files like "dir/file.txt", we need to check in "checkpoint_dir/dir/"
+    // Extract directory part if it exists
+    char dir_part[MAX_PATH_LEN] = "";
+    char file_part[MAX_PATH_LEN];
+    strcpy(file_part, path);
+    
+    char* last_slash = strrchr(file_part, '/');
+    if (last_slash != NULL) {
+        *last_slash = '\0';  // Split into dir and file
+        strcpy(dir_part, file_part);
+        strcpy(file_part, last_slash + 1);
+        
+        // checkpoint dir is: root/checkpoint_dir/dir_part
+        snprintf(checkpoint_base_path, sizeof(checkpoint_base_path), 
+                 "%s/checkpoint_dir/%s", g_config.root_dir, dir_part);
+    } else {
+        // No directory, just use checkpoint_dir root
+        snprintf(checkpoint_base_path, sizeof(checkpoint_base_path), 
+                 "%s/checkpoint_dir", g_config.root_dir);
+    }
+    
+    DIR* dir = opendir(checkpoint_base_path);
     if (dir == NULL) {
         char* err_msg = "Error: Failed to open checkpoint directory";
         send(sock, err_msg, strlen(err_msg), 0);
@@ -1544,8 +1586,9 @@ void handle_op_listcheckpoints(int sock, const char* path) {
     }
     
     // Build prefix to match: filename.
+    // For "dir/file.txt", we search for "file.txt." in checkpoint_dir/dir/
     char prefix[MAX_PATH_LEN + 1];
-    snprintf(prefix, sizeof(prefix), "%s.", path);
+    snprintf(prefix, sizeof(prefix), "%s.", file_part);
     size_t prefix_len = strlen(prefix);
     
     struct dirent* entry;
@@ -1606,7 +1649,7 @@ void handle_op_createfolder(const char* path, int sock) {
             if (stat(parent_full_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
                 res.status = ERR_INVALID_PATH;
                 sprintf(res.message, "Error: Parent directory '%s' does not exist. Create it first.", parent_path);
-                send(sock, &res, sizeof(ServerResponse), 0);
+                SEND_SERVER_RESPONSE(sock, &res);
                 return;
             }
         }
@@ -1618,7 +1661,7 @@ void handle_op_createfolder(const char* path, int sock) {
             res.status = ERR_INVALID_PATH;
             sprintf(res.message, "Error: Failed to create directory '%s' in %s: %s", 
                     path, dir_types[i], strerror(errno));
-            send(sock, &res, sizeof(ServerResponse), 0);
+            SEND_SERVER_RESPONSE(sock, &res);
             return;
         }
     }
@@ -1626,7 +1669,7 @@ void handle_op_createfolder(const char* path, int sock) {
     res.status = ERR_OK;
     sprintf(res.message, "Folder '%s' created successfully.", path);
     printf("SS: Created folder '%s' in all directories.\n", path);
-    send(sock, &res, sizeof(ServerResponse), 0);
+    SEND_SERVER_RESPONSE(sock, &res);
     
     // Sync folder creation to partner
     sync_operation_to_partner(SS_SYNC_CREATEFOLDER, path, NULL);
@@ -1694,7 +1737,7 @@ void handle_op_move(const char* old_path, const char* new_path, int sock) {
                 res.status = ERR_INVALID_PATH;
                 sprintf(res.message, "Error: Failed to move file in %s: %s", 
                         dir_types[i], strerror(errno));
-                send(sock, &res, sizeof(ServerResponse), 0);
+                SEND_SERVER_RESPONSE(sock, &res);
                 return;
             }
         }
@@ -1738,7 +1781,7 @@ void handle_op_move(const char* old_path, const char* new_path, int sock) {
     res.status = ERR_OK;
     sprintf(res.message, "File moved from '%s' to '%s'.", old_path, new_path);
     printf("SS: Moved file '%s' to '%s'.\n", old_path, new_path);
-    send(sock, &res, sizeof(ServerResponse), 0);
+    SEND_SERVER_RESPONSE(sock, &res);
     
     // Sync move operation to partner
     sync_operation_to_partner(SS_SYNC_MOVE, old_path, new_path);

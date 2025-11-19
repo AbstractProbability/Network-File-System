@@ -1,4 +1,5 @@
 #include "ss.h"
+#include "../include/serialize.h"
 #include <fcntl.h>
 #include <sys/sendfile.h>
 #include <sys/stat.h>
@@ -82,7 +83,7 @@ void* handle_client_connection(void* arg) {
     
     ClientRequest req;
     
-    if (recv(sock, &req, sizeof(ClientRequest), 0) <= 0) {
+    if (RECV_CLIENT_REQUEST(sock, &req) <= 0) {
         printf("SS: Client disconnected before sending request.\n");
         close(sock);
         return NULL;
@@ -121,6 +122,12 @@ void* handle_client_connection(void* arg) {
             }
             fclose(f);
             send(sock, "STOP", 5, 0);
+            
+            // Update access time in info file (but not modified time)
+            update_info_file(req.path, req.username, 0);
+            
+            // Send updated info to NS
+            send_info_update_to_ns(req.path);
             break;
         }
         case OP_LISTCHECKPOINTS:
@@ -167,7 +174,7 @@ void* handle_ns_commands(void* arg) {
     char path_buf[MAX_PATH_LEN];
     char owner_buf[MAX_USERNAME_LEN];
 
-    while (recv(g_config.cmd_sock, &op, sizeof(NSOpCode), 0) > 0) {
+    while (RECV_OPCODE(g_config.cmd_sock, &op) > 0) {
         memset(&ack, 0, sizeof(ServerResponse));
         
         switch (op) {
@@ -175,7 +182,7 @@ void* handle_ns_commands(void* arg) {
                 printf("SS: Received heartbeat from NS.\n");
                 // Send back SS_NS_HEARTBEAT opcode on update socket
                 SSOpCode hb_response = SS_NS_HEARTBEAT;
-                send(g_config.update_sock, &hb_response, sizeof(SSOpCode), 0);
+                SEND_OPCODE(g_config.update_sock, hb_response);
                 break;
             
             case NS_SS_PAIR_AND_SYNC: {
@@ -185,10 +192,10 @@ void* handle_ns_commands(void* arg) {
                 int partner_port;
                 int should_send_sync;
                 
-                recv(g_config.cmd_sock, partner_name, MAX_PATH_LEN, 0);
-                recv(g_config.cmd_sock, partner_ip, INET_ADDRSTRLEN, 0);
-                recv(g_config.cmd_sock, &partner_port, sizeof(int), 0);
-                recv(g_config.cmd_sock, &should_send_sync, sizeof(int), 0);
+                recv_full(g_config.cmd_sock, partner_name, MAX_PATH_LEN);
+                recv_full(g_config.cmd_sock, partner_ip, INET_ADDRSTRLEN);
+                RECV_INT(g_config.cmd_sock, &partner_port);
+                RECV_INT(g_config.cmd_sock, &should_send_sync);
                 
                 printf("SS: Received pair command - partner '%s' at %s:%d, should_send_sync=%d\n", 
                        partner_name, partner_ip, partner_port, should_send_sync);
@@ -200,6 +207,10 @@ void* handle_ns_commands(void* arg) {
                 g_backup_state.partner_backup_port = partner_port;
                 g_backup_state.should_send_full_sync = should_send_sync;
                 pthread_mutex_unlock(&g_backup_state.sync_lock);
+                
+                // Send acknowledgment to NS
+                ack.status = ERR_OK;
+                SEND_SERVER_RESPONSE(g_config.cmd_sock, &ack);
                 
                 // Only initiate connection if our name is lexicographically smaller
                 // This prevents both SSes from trying to connect simultaneously
@@ -228,29 +239,29 @@ void* handle_ns_commands(void* arg) {
                 break;
                 
             case NS_SS_CREATE:
-                recv(g_config.cmd_sock, path_buf, MAX_PATH_LEN, 0);
-                recv(g_config.cmd_sock, owner_buf, MAX_USERNAME_LEN, 0);
+                recv_full(g_config.cmd_sock, path_buf, MAX_PATH_LEN);
+                recv_full(g_config.cmd_sock, owner_buf, MAX_USERNAME_LEN);
                 printf("SS: Received CREATE for %s by %s\n", path_buf, owner_buf);
                 
                 ack.status = handle_op_create(path_buf, owner_buf);
-                send(g_config.cmd_sock, &ack, sizeof(ServerResponse), 0);
+                SEND_SERVER_RESPONSE(g_config.cmd_sock, &ack);
                 break;
 
             case NS_SS_DELETE:
-                recv(g_config.cmd_sock, path_buf, MAX_PATH_LEN, 0);
+                recv_full(g_config.cmd_sock, path_buf, MAX_PATH_LEN);
                 printf("SS: Received DELETE for %s\n", path_buf);
 
                 // --- THIS IS THE FIX ---
                 ack.status = handle_op_delete(path_buf);
                 // --- END OF FIX ---
                 
-                send(g_config.cmd_sock, &ack, sizeof(ServerResponse), 0);
+                SEND_SERVER_RESPONSE(g_config.cmd_sock, &ack);
                 break;
                 
             case NS_SS_UPDATE_INFO:
-                recv(g_config.cmd_sock, path_buf, MAX_PATH_LEN, 0);
+                recv_full(g_config.cmd_sock, path_buf, MAX_PATH_LEN);
                 char info_content[MAX_INFO_LEN];
-                recv(g_config.cmd_sock, info_content, MAX_INFO_LEN, 0);
+                recv_full(g_config.cmd_sock, info_content, MAX_INFO_LEN);
                 printf("SS: Received UPDATE_INFO for %s\n", path_buf);
                 
                 char info_path[MAX_PATH_LEN * 2];
@@ -267,11 +278,11 @@ void* handle_ns_commands(void* arg) {
                     perror("SS: Failed to update info file");
                 }
                 
-                send(g_config.cmd_sock, &ack, sizeof(ServerResponse), 0);
+                SEND_SERVER_RESPONSE(g_config.cmd_sock, &ack);
                 break;
                 
             case NS_SS_GET_INFO:
-                recv(g_config.cmd_sock, path_buf, MAX_PATH_LEN, 0);
+                recv_full(g_config.cmd_sock, path_buf, MAX_PATH_LEN);
                 printf("SS: Received GET_INFO for %s\n", path_buf);
                 
                 char info_path_get[MAX_PATH_LEN * 2];
@@ -285,29 +296,29 @@ void* handle_ns_commands(void* arg) {
                     fread(info_content_get, 1, MAX_INFO_LEN - 1, info_file_get);
                     fclose(info_file_get);
                     ack.status = ERR_OK;
-                    send(g_config.cmd_sock, &ack, sizeof(ServerResponse), 0);
-                    send(g_config.cmd_sock, info_content_get, MAX_INFO_LEN, 0);
+                    SEND_SERVER_RESPONSE(g_config.cmd_sock, &ack);
+                    send_full(g_config.cmd_sock, info_content_get, MAX_INFO_LEN);
                     printf("SS: Sent info for '%s' to NS\n", path_buf);
                 } else {
                     ack.status = ERR_FILE_NOT_FOUND;
-                    send(g_config.cmd_sock, &ack, sizeof(ServerResponse), 0);
+                    SEND_SERVER_RESPONSE(g_config.cmd_sock, &ack);
                     perror("SS: Failed to read info file");
                 }
                 break;
                 
             case NS_SS_UNDO:
-                recv(g_config.cmd_sock, path_buf, MAX_PATH_LEN, 0);
-                recv(g_config.cmd_sock, owner_buf, MAX_USERNAME_LEN, 0);
+                recv_full(g_config.cmd_sock, path_buf, MAX_PATH_LEN);
+                recv_full(g_config.cmd_sock, owner_buf, MAX_USERNAME_LEN);
                 printf("SS: Received UNDO for %s by %s\n", path_buf, owner_buf);
                 
                 ack.status = handle_op_undo(path_buf, owner_buf);
-                send(g_config.cmd_sock, &ack, sizeof(ServerResponse), 0);
+                SEND_SERVER_RESPONSE(g_config.cmd_sock, &ack);
                 break;
             
             case NS_SS_CHECKPOINT: {
                 char checkpoint_tag[MAX_PATH_LEN];
-                recv(g_config.cmd_sock, path_buf, MAX_PATH_LEN, 0);
-                recv(g_config.cmd_sock, checkpoint_tag, MAX_PATH_LEN, 0);
+                recv_full(g_config.cmd_sock, path_buf, MAX_PATH_LEN);
+                recv_full(g_config.cmd_sock, checkpoint_tag, MAX_PATH_LEN);
                 printf("SS: Received CHECKPOINT for %s with tag '%s'\n", path_buf, checkpoint_tag);
                 
                 ack.status = handle_op_checkpoint(path_buf, checkpoint_tag);
@@ -316,15 +327,15 @@ void* handle_ns_commands(void* arg) {
                 } else {
                     sprintf(ack.message, "Failed to create checkpoint.");
                 }
-                send(g_config.cmd_sock, &ack, sizeof(ServerResponse), 0);
+                SEND_SERVER_RESPONSE(g_config.cmd_sock, &ack);
                 break;
             }
             
             case NS_SS_REVERT: {
                 char checkpoint_tag[MAX_PATH_LEN];
-                recv(g_config.cmd_sock, path_buf, MAX_PATH_LEN, 0);
-                recv(g_config.cmd_sock, checkpoint_tag, MAX_PATH_LEN, 0);
-                recv(g_config.cmd_sock, owner_buf, MAX_USERNAME_LEN, 0);
+                recv_full(g_config.cmd_sock, path_buf, MAX_PATH_LEN);
+                recv_full(g_config.cmd_sock, checkpoint_tag, MAX_PATH_LEN);
+                recv_full(g_config.cmd_sock, owner_buf, MAX_USERNAME_LEN);
                 printf("SS: Received REVERT for %s to checkpoint '%s' by %s\n", 
                        path_buf, checkpoint_tag, owner_buf);
                 
@@ -338,12 +349,12 @@ void* handle_ns_commands(void* arg) {
                 } else {
                     sprintf(ack.message, "Failed to revert to checkpoint.");
                 }
-                send(g_config.cmd_sock, &ack, sizeof(ServerResponse), 0);
+                SEND_SERVER_RESPONSE(g_config.cmd_sock, &ack);
                 break;
             }
             
             case NS_SS_CREATEFOLDER: {
-                recv(g_config.cmd_sock, path_buf, MAX_PATH_LEN, 0);
+                recv_full(g_config.cmd_sock, path_buf, MAX_PATH_LEN);
                 printf("SS: Received CREATEFOLDER for '%s'\n", path_buf);
                 
                 handle_op_createfolder(path_buf, g_config.cmd_sock);
@@ -352,8 +363,8 @@ void* handle_ns_commands(void* arg) {
             
             case NS_SS_MOVE: {
                 char new_path[MAX_PATH_LEN];
-                recv(g_config.cmd_sock, path_buf, MAX_PATH_LEN, 0);
-                recv(g_config.cmd_sock, new_path, MAX_PATH_LEN, 0);
+                recv_full(g_config.cmd_sock, path_buf, MAX_PATH_LEN);
+                recv_full(g_config.cmd_sock, new_path, MAX_PATH_LEN);
                 printf("SS: Received MOVE from '%s' to '%s'\n", path_buf, new_path);
                 
                 handle_op_move(path_buf, new_path, g_config.cmd_sock);

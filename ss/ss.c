@@ -1,7 +1,8 @@
 #include "ss.h"
+#include "../include/serialize.h"
 #include <errno.h>
 #include <dirent.h> 
-#include <sys/stat.h> 
+#include <sys/stat.h>
 
 // Define the global config
 SS_Config g_config;
@@ -144,14 +145,19 @@ void scan_and_send(int ns_sock, const char* base_dir, const char* rel_path) {
             scan_and_send(ns_sock, base_dir, new_rel_path);
         } else {
             SS_File_Sync_Packet sync_pkt;
+            memset(&sync_pkt, 0, sizeof(sync_pkt)); // Initialize all fields to zero
             strcpy(sync_pkt.path, new_rel_path);
             
             char info_path[MAX_PATH_LEN * 2];
             get_full_path("info_dir", new_rel_path, info_path);
             read_info_file(info_path, sync_pkt.info_content);
             
+            // undo_content and undo_size remain 0 (empty) for initial file index sync
+            
             printf("SS: Syncing file: %s\n", sync_pkt.path);
-            send(ns_sock, &sync_pkt, sizeof(SS_File_Sync_Packet), 0);
+            char sync_buffer[SERIALIZED_SS_FILE_SYNC_PACKET_SIZE];
+            serialize_ss_file_sync_packet(&sync_pkt, sync_buffer);
+            send(ns_sock, sync_buffer, SERIALIZED_SS_FILE_SYNC_PACKET_SIZE, 0);
         }
     }
     closedir(dir);
@@ -165,8 +171,11 @@ void ss_send_file_index(int ns_sock) {
     scan_and_send(ns_sock, file_dir_path, "");
 
     SS_File_Sync_Packet end_pkt;
+    memset(&end_pkt, 0, sizeof(end_pkt)); // Initialize all fields
     strcpy(end_pkt.path, SYNC_END_MARKER);
-    send(ns_sock, &end_pkt, sizeof(SS_File_Sync_Packet), 0);
+    char end_buffer[SERIALIZED_SS_FILE_SYNC_PACKET_SIZE];
+    serialize_ss_file_sync_packet(&end_pkt, end_buffer);
+    send(ns_sock, end_buffer, SERIALIZED_SS_FILE_SYNC_PACKET_SIZE, 0);
     
     printf("SS: File sync complete.\n");
 }
@@ -209,10 +218,10 @@ void ss_register_with_ns() {
     // 3. Send Initial Packet on command socket
     InitialPacket init_pkt;
     init_pkt.type = CONN_SS;
-    send(g_config.cmd_sock, &init_pkt, sizeof(InitialPacket), 0);
+    SEND_INITIAL_PACKET(g_config.cmd_sock, &init_pkt);
 
     // 4. Send Initial Packet on update socket
-    send(g_config.update_sock, &init_pkt, sizeof(InitialPacket), 0);
+    SEND_INITIAL_PACKET(g_config.update_sock, &init_pkt);
 
     // 5. Prepare SS Info Packet
     SS_Info_Packet info_pkt;
@@ -236,8 +245,10 @@ void ss_register_with_ns() {
     info_pkt.update_port = ntohs(local_addr.sin_port);
     
     // 6. Send SS Info Packet on BOTH sockets (for identification)
-    send(g_config.cmd_sock, &info_pkt, sizeof(SS_Info_Packet), 0);
-    send(g_config.update_sock, &info_pkt, sizeof(SS_Info_Packet), 0);
+    char info_buffer[SERIALIZED_SS_INFO_PACKET_SIZE];
+    serialize_ss_info_packet(&info_pkt, info_buffer);
+    send(g_config.cmd_sock, info_buffer, SERIALIZED_SS_INFO_PACKET_SIZE, 0);
+    send(g_config.update_sock, info_buffer, SERIALIZED_SS_INFO_PACKET_SIZE, 0);
     printf("SS: Sent info packet to NS (name: %s, client_port: %d, backup_port: %d, update_port: %d, empty: %d)\n", 
            info_pkt.name, info_pkt.port_for_clients, info_pkt.backup_port, info_pkt.update_port, info_pkt.is_empty);
 
@@ -365,7 +376,7 @@ void* backup_listener_thread(void* arg) {
         
         // Receive partner identification
         char partner_name[MAX_PATH_LEN];
-        if (recv(partner_sock, partner_name, MAX_PATH_LEN, 0) <= 0) {
+        if (recv_full(partner_sock, partner_name, MAX_PATH_LEN) <= 0) {
             close(partner_sock);
             continue;
         }
@@ -412,7 +423,7 @@ void* handle_partner_sync(void* arg) {
         
         if (sock == -1) break;
         
-        int bytes = recv(sock, &op, sizeof(op), 0);
+        int bytes = RECV_OPCODE(sock, &op);
         if (bytes <= 0) {
             // Partner disconnected
             printf("SS: Partner disconnected during sync\n");
@@ -432,7 +443,7 @@ void* handle_partner_sync(void* arg) {
         switch (op) {
             case SS_SYNC_CREATEFOLDER: {
                 char path[MAX_PATH_LEN];
-                recv(sock, path, MAX_PATH_LEN, 0);
+                recv_full(sock, path, MAX_PATH_LEN);
                 
                 // Create folder in file_dir, info_dir, undo_dir with parent directories
                 const char* dir_types[] = {"file_dir", "info_dir", "undo_dir"};
@@ -462,7 +473,12 @@ void* handle_partner_sync(void* arg) {
             
             case SS_SYNC_FILE_DATA: {
                 SS_Sync_File_Packet file_pkt;
-                recv(sock, &file_pkt, sizeof(file_pkt), 0);
+                char file_buffer[SERIALIZED_SS_SYNC_FILE_PACKET_SIZE];
+                if (recv_full(sock, file_buffer, SERIALIZED_SS_SYNC_FILE_PACKET_SIZE) <= 0) {
+                    printf("SS: Failed to receive file sync packet\n");
+                    break;
+                }
+                deserialize_ss_sync_file_packet(file_buffer, &file_pkt);
                 
                 // Ensure parent directories exist before creating file
                 char file_full_path[MAX_PATH_LEN * 3];
@@ -577,13 +593,14 @@ void* handle_partner_sync(void* arg) {
             
             case SS_SYNC_COMPLETE:
                 printf("SS: Full sync complete from partner\n");
+                // Don't exit - keep handler alive for incremental sync messages
                 break;
             
             case SS_SYNC_CREATE: {
                 char path[MAX_PATH_LEN];
                 char owner[MAX_PATH_LEN];
-                recv(sock, path, MAX_PATH_LEN, 0);
-                recv(sock, owner, MAX_PATH_LEN, 0);
+                recv_full(sock, path, MAX_PATH_LEN);
+                recv_full(sock, owner, MAX_PATH_LEN);
                 
                 // Call handle_op_create to create the file
                 handle_op_create(path, owner);
@@ -593,7 +610,7 @@ void* handle_partner_sync(void* arg) {
             
             case SS_SYNC_DELETE: {
                 char path[MAX_PATH_LEN];
-                recv(sock, path, MAX_PATH_LEN, 0);
+                recv_full(sock, path, MAX_PATH_LEN);
                 
                 // Call handle_op_delete to delete the file
                 handle_op_delete(path);
@@ -604,8 +621,8 @@ void* handle_partner_sync(void* arg) {
             case SS_SYNC_MOVE: {
                 char old_path[MAX_PATH_LEN];
                 char new_path[MAX_PATH_LEN];
-                recv(sock, old_path, MAX_PATH_LEN, 0);
-                recv(sock, new_path, MAX_PATH_LEN, 0);
+                recv_full(sock, old_path, MAX_PATH_LEN);
+                recv_full(sock, new_path, MAX_PATH_LEN);
                 
                 // Directly move files without sending response (no client socket)
                 char old_paths[4][MAX_PATH_LEN * 3];
@@ -628,8 +645,8 @@ void* handle_partner_sync(void* arg) {
             case SS_SYNC_CHECKPOINT: {
                 char path[MAX_PATH_LEN];
                 char tag[MAX_PATH_LEN];
-                recv(sock, path, MAX_PATH_LEN, 0);
-                recv(sock, tag, MAX_PATH_LEN, 0);
+                recv_full(sock, path, MAX_PATH_LEN);
+                recv_full(sock, tag, MAX_PATH_LEN);
                 
                 // Call handle_op_checkpoint to create checkpoint
                 handle_op_checkpoint(path, tag);
@@ -758,7 +775,7 @@ void sync_directory_recursive(const char* rel_path, int sock) {
         if (S_ISDIR(st.st_mode)) {
             // Send CREATEFOLDER command
             SSSyncOpCode opcode = SS_SYNC_CREATEFOLDER;
-            send(sock, &opcode, sizeof(opcode), 0);
+            SEND_OPCODE(sock, opcode);
             send(sock, new_rel_path, MAX_PATH_LEN, 0);
             
             printf("SS: Syncing folder: %s\n", new_rel_path);
@@ -768,7 +785,7 @@ void sync_directory_recursive(const char* rel_path, int sock) {
         } else {
             // Send file
             SSSyncOpCode opcode = SS_SYNC_FILE_DATA;
-            send(sock, &opcode, sizeof(opcode), 0);
+            SEND_OPCODE(sock, opcode);
             
             SS_Sync_File_Packet file_pkt;
             memset(&file_pkt, 0, sizeof(file_pkt));
@@ -787,7 +804,9 @@ void sync_directory_recursive(const char* rel_path, int sock) {
             }
             
             // Send file packet
-            send(sock, &file_pkt, sizeof(file_pkt), 0);
+            char file_buffer[SERIALIZED_SS_SYNC_FILE_PACKET_SIZE];
+            serialize_ss_sync_file_packet(&file_pkt, file_buffer);
+            send(sock, file_buffer, SERIALIZED_SS_SYNC_FILE_PACKET_SIZE, 0);
             
             // Send actual file content
             FILE* f = fopen(entry_full, "rb");
@@ -824,10 +843,6 @@ void sync_all_files_to_partner() {
     
     // Send completion marker
     pthread_mutex_lock(&g_backup_state.sync_lock);
-    if (g_backup_state.partner_sync_sock != -1) {
-        SSSyncOpCode complete = SS_SYNC_COMPLETE;
-        send(g_backup_state.partner_sync_sock, &complete, sizeof(complete), 0);
-    }
     pthread_mutex_unlock(&g_backup_state.sync_lock);
     
     printf("SS: Full sync to partner complete\n");
@@ -844,14 +859,14 @@ void sync_operation_to_partner(SSSyncOpCode opcode, const char* path, const char
     }
     
     // Send opcode
-    send(sock, &opcode, sizeof(opcode), 0);
+    SEND_OPCODE(sock, opcode);
     
     // Send path
-    send(sock, path, MAX_PATH_LEN, 0);
+    send_full(sock, path, MAX_PATH_LEN);
     
     // Send second argument if needed
     if (arg2) {
-        send(sock, arg2, MAX_PATH_LEN, 0);
+        send_full(sock, arg2, MAX_PATH_LEN);
     }
 }
 
@@ -867,7 +882,7 @@ void sync_file_to_partner(const char* path) {
     
     // Send FILE_DATA opcode
     SSSyncOpCode opcode = SS_SYNC_FILE_DATA;
-    send(sock, &opcode, sizeof(opcode), 0);
+    SEND_OPCODE(sock, opcode);
     
     // Build file packet
     SS_Sync_File_Packet file_pkt;
@@ -905,7 +920,9 @@ void sync_file_to_partner(const char* path) {
     }
     
     // Send file packet
-    send(sock, &file_pkt, sizeof(file_pkt), 0);
+    char file_buffer[SERIALIZED_SS_SYNC_FILE_PACKET_SIZE];
+    serialize_ss_sync_file_packet(&file_pkt, file_buffer);
+    send(sock, file_buffer, SERIALIZED_SS_SYNC_FILE_PACKET_SIZE, 0);
     
     // Send file content
     FILE* f = fopen(file_full_path, "rb");

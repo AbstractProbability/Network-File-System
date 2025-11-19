@@ -1,4 +1,5 @@
 #include "../include/common.h"
+#include "../include/serialize.h"
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
@@ -257,10 +258,10 @@ int register_with_ns(const char* username) {
     InitialPacket init_pkt;
     init_pkt.type = CONN_CLIENT;
     strncpy(init_pkt.username, g_username, MAX_USERNAME_LEN);
-    send(ns_sock, &init_pkt, sizeof(InitialPacket), 0);
+    SEND_INITIAL_PACKET(ns_sock, &init_pkt);
 
     ServerResponse res;
-    if (recv(ns_sock, &res, sizeof(ServerResponse), 0) <= 0) {
+    if (RECV_SERVER_RESPONSE(ns_sock, &res) <= 0) {
         printf("NS disconnected.\n");
         return -1;
     }
@@ -309,10 +310,10 @@ void do_list() {
     req.op = OP_LIST;
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]:\n%s\n", res.message);
 }
 
@@ -338,10 +339,10 @@ void do_view(char* flags_str) {
     // Pack flags into int: bit 0 = show_all, bit 1 = show_long
     req.flags = (show_all ? 1 : 0) | (show_long ? 2 : 0);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]:\n%s\n", res.message);
 }
 
@@ -352,10 +353,10 @@ void do_create(char* path) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     strncpy(req.path, path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -366,10 +367,10 @@ void do_delete(char* path) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     strncpy(req.path, path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -380,10 +381,10 @@ void do_undo(char* path) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     strncpy(req.path, path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -395,10 +396,10 @@ void do_checkpoint(char* path, char* tag) {
     strncpy(req.path, path, MAX_PATH_LEN);
     strncpy(req.arg1, tag, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -410,10 +411,10 @@ void do_viewcheckpoint(char* path, char* tag) {
     strncpy(req.path, path, MAX_PATH_LEN);
     strncpy(req.arg1, tag, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    if (recv(ns_sock, &res, sizeof(ServerResponse), 0) <= 0 || res.status != ERR_OK) {
+    if (RECV_SERVER_RESPONSE(ns_sock, &res) <= 0 || res.status != ERR_OK) {
         printf("[NS Response]: %s\n", res.message);
         return;
     }
@@ -426,7 +427,7 @@ void do_viewcheckpoint(char* path, char* tag) {
     
     // Use arg1 for checkpoint tag from NS response
     strncpy(req.arg1, res.message, MAX_PATH_LEN);
-    send(temp_ss_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(temp_ss_sock, &req);
     
     char buffer[MAX_BUFFER_LEN];
     printf("--- Checkpoint Content (tag: %s) ---\n", tag);
@@ -448,10 +449,10 @@ void do_revert(char* path, char* tag) {
     strncpy(req.path, path, MAX_PATH_LEN);
     strncpy(req.arg1, tag, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -462,10 +463,10 @@ void do_listcheckpoints(char* path) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     strncpy(req.path, path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    if (recv(ns_sock, &res, sizeof(ServerResponse), 0) <= 0 || res.status != ERR_OK) {
+    if (RECV_SERVER_RESPONSE(ns_sock, &res) <= 0 || res.status != ERR_OK) {
         printf("[NS Response]: %s\n", res.message);
         return;
     }
@@ -476,24 +477,59 @@ void do_listcheckpoints(char* path) {
     int temp_ss_sock = connect_to_server(res.ss_ip, res.ss_port);
     if (temp_ss_sock < 0) return;
     
-    send(temp_ss_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(temp_ss_sock, &req);
     
     char buffer[MAX_BUFFER_LEN];
+    char line_buffer[MAX_BUFFER_LEN];
+    int buffer_pos = 0;
+    int line_pos = 0;
+    
     printf("--- Checkpoints for '%s' ---\n", path);
     int count = 0;
-    while (1) {
-        memset(buffer, 0, MAX_BUFFER_LEN);
-        int n = recv(temp_ss_sock, buffer, MAX_BUFFER_LEN, 0);
-        if (n <= 0 || strcmp(buffer, "STOP") == 0) break;
-        
-        // Remove trailing newline from buffer if present
-        size_t len = strlen(buffer);
-        if (len > 0 && buffer[len - 1] == '\n') {
-            buffer[len - 1] = '\0';
+    int done = 0;
+    
+    while (!done) {
+        // Try to get more data if buffer is empty
+        if (buffer_pos == 0) {
+            memset(buffer, 0, MAX_BUFFER_LEN);
+            int n = recv(temp_ss_sock, buffer, MAX_BUFFER_LEN - 1, 0);
+            if (n <= 0) break;
+            buffer[n] = '\0';
+            buffer_pos = 0;
         }
         
-        printf("%d. %s\n", ++count, buffer);
+        // Process buffer character by character to extract lines
+        while (buffer[buffer_pos] != '\0') {
+            char c = buffer[buffer_pos++];
+            
+            if (c == '\n') {
+                // End of line - process it
+                line_buffer[line_pos] = '\0';
+                
+                if (strcmp(line_buffer, "STOP") == 0) {
+                    done = 1;
+                    break;
+                }
+                
+                // Print the checkpoint (remove leading "- " if present)
+                char* display = line_buffer;
+                if (line_buffer[0] == '-' && line_buffer[1] == ' ') {
+                    display = line_buffer + 2;
+                }
+                
+                if (strlen(display) > 0) {
+                    printf("%d. %s\n", ++count, display);
+                }
+                
+                line_pos = 0;
+            } else if (line_pos < MAX_BUFFER_LEN - 1) {
+                line_buffer[line_pos++] = c;
+            }
+        }
+        
+        buffer_pos = 0;  // Reset for next recv
     }
+    
     if (count == 0) {
         printf("No checkpoints found.\n");
     }
@@ -508,10 +544,10 @@ void do_createfolder(char* path) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     strncpy(req.path, path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -523,10 +559,10 @@ void do_move(char* old_path, char* new_path) {
     strncpy(req.path, old_path, MAX_PATH_LEN);
     strncpy(req.arg1, new_path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -537,10 +573,10 @@ void do_viewfolder(char* path) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     strncpy(req.path, path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]:\n%s\n", res.message);
 }
 
@@ -551,10 +587,10 @@ void do_read(char* path) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     strncpy(req.path, path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    if (recv(ns_sock, &res, sizeof(ServerResponse), 0) <= 0 || res.status != ERR_OK) {
+    if (RECV_SERVER_RESPONSE(ns_sock, &res) <= 0 || res.status != ERR_OK) {
         printf("[NS Response]: %s\n", res.message);
         return;
     }
@@ -564,7 +600,7 @@ void do_read(char* path) {
     int temp_ss_sock = connect_to_server(res.ss_ip, res.ss_port);
     if (temp_ss_sock < 0) return;
     
-    send(temp_ss_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(temp_ss_sock, &req);
     
     char buffer[MAX_BUFFER_LEN];
     printf("--- File Content ---\n");
@@ -591,10 +627,10 @@ void do_stream(char* path) {
     strncpy(req.path, path, MAX_PATH_LEN);
     
     // Ask NS for SS info
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    if (recv(ns_sock, &res, sizeof(ServerResponse), 0) <= 0 || res.status != ERR_OK) {
+    if (RECV_SERVER_RESPONSE(ns_sock, &res) <= 0 || res.status != ERR_OK) {
         printf("[NS Response]: %s\n", res.message);
         return;
     }
@@ -609,11 +645,11 @@ void do_stream(char* path) {
     }
     
     // Send request to SS
-    send(temp_ss_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(temp_ss_sock, &req);
     
     // First receive the ServerResponse from SS
     ServerResponse ss_res;
-    if (recv(temp_ss_sock, &ss_res, sizeof(ServerResponse), 0) <= 0) {
+    if (RECV_SERVER_RESPONSE(temp_ss_sock, &ss_res) <= 0) {
         printf("Error: Storage server disconnected.\n");
         close(temp_ss_sock);
         return;
@@ -661,10 +697,10 @@ void do_info(char* path) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     strncpy(req.path, path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[File Info]:\n%s\n", res.message);
 }
 
@@ -677,10 +713,10 @@ void do_addaccess(char* path, char* username, char* type) {
     strncpy(req.arg1, username, MAX_PATH_LEN);
     req.arg2[0] = type[0];
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -693,10 +729,10 @@ void do_remaccess(char* path, char* username, char* type) {
     strncpy(req.arg1, username, MAX_PATH_LEN);
     req.arg2[0] = type[0];
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -708,10 +744,10 @@ void do_reqaccess(char* path, char* type) {
     strncpy(req.path, path, MAX_PATH_LEN);
     req.arg2[0] = type[0];
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -721,10 +757,10 @@ void do_reqlist() {
     req.op = OP_REQLIST;
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("%s\n", res.message);
 }
 
@@ -735,10 +771,10 @@ void do_approve(char* request_id_str) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     req.index = atoi(request_id_str);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -749,10 +785,10 @@ void do_reject(char* request_id_str) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     req.index = atoi(request_id_str);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    recv(ns_sock, &res, sizeof(ServerResponse), 0);
+    RECV_SERVER_RESPONSE(ns_sock, &res);
     printf("[NS Response]: %s\n", res.message);
 }
 
@@ -767,10 +803,10 @@ void do_write(char* path, char* index_str) {
     // Store path for later use in commit
     strncpy(g_current_write_path, path, MAX_PATH_LEN);
 
-    send(ns_sock, &write_req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &write_req);
     
     ServerResponse res;
-    if (recv(ns_sock, &res, sizeof(ServerResponse), 0) <= 0 || res.status != ERR_OK) {
+    if (RECV_SERVER_RESPONSE(ns_sock, &res) <= 0 || res.status != ERR_OK) {
         printf("[NS Response]: %s\n", res.message);
         return;
     }
@@ -781,9 +817,9 @@ void do_write(char* path, char* index_str) {
         return;
     }
     
-    send(ss_sock, &write_req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ss_sock, &write_req);
     
-    if (recv(ss_sock, &res, sizeof(ServerResponse), 0) <= 0 || res.status != ERR_OK) {
+    if (RECV_SERVER_RESPONSE(ss_sock, &res) <= 0 || res.status != ERR_OK) {
         printf("[SS Response]: %s\n", res.message);
         close(ss_sock);
         ss_sock = -1;
@@ -887,12 +923,12 @@ void do_commit() {
     memset(&pkt, 0, sizeof(ClientWritePacket));
     strncpy(pkt.content, final_content, MAX_COMMIT_LEN);
     
-    send(ss_sock, &pkt, sizeof(ClientWritePacket), 0);
+    SEND_CLIENT_WRITE_PACKET(ss_sock, &pkt);
     printf("Sent commit. Waiting for ACK...\n");
     free(final_content);
     
     ServerResponse res;
-    if (recv(ss_sock, &res, sizeof(ServerResponse), 0) <= 0 || res.status != ERR_OK) {
+    if (RECV_SERVER_RESPONSE(ss_sock, &res) <= 0 || res.status != ERR_OK) {
         printf("[SS Response]: Commit failed: %s\n", res.message);
     } else {
         printf("[SS Response]: %s\n", res.message);
@@ -909,7 +945,7 @@ void do_commit() {
     done_req.op = OP_WRITER_DONE;
     strncpy(done_req.username, g_username, MAX_USERNAME_LEN);
     strncpy(done_req.path, g_current_write_path, MAX_PATH_LEN);
-    send(ns_sock, &done_req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &done_req);
     
     printf("--- Exited WRITE mode ---\n");
 }
@@ -925,7 +961,7 @@ void do_abort() {
     done_req.op = OP_WRITER_DONE;
     strncpy(done_req.username, g_username, MAX_USERNAME_LEN);
     strncpy(done_req.path, g_current_write_path, MAX_PATH_LEN);
-    send(ns_sock, &done_req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &done_req);
     
     g_mode = MODE_NS;
     printf("Aborted write. Local changes discarded.\n");
@@ -939,10 +975,10 @@ void do_exec(char* path) {
     strncpy(req.username, g_username, MAX_USERNAME_LEN);
     strncpy(req.path, path, MAX_PATH_LEN);
     
-    send(ns_sock, &req, sizeof(ClientRequest), 0);
+    SEND_CLIENT_REQUEST(ns_sock, &req);
     
     ServerResponse res;
-    if (recv(ns_sock, &res, sizeof(ServerResponse), 0) <= 0 || res.status != ERR_OK) {
+    if (RECV_SERVER_RESPONSE(ns_sock, &res) <= 0 || res.status != ERR_OK) {
         printf("[NS Response]: %s\n", res.message);
         return;
     }
@@ -959,9 +995,19 @@ void do_exec(char* path) {
             printf("\n[Connection lost or exec completed]\n");
             break;
         }
-        if (strncmp(buffer, "EXEC_STOP", 9) == 0) {
+        
+        // Check if buffer contains EXEC_STOP marker
+        char* stop_marker = strstr(buffer, "EXEC_STOP");
+        if (stop_marker != NULL) {
+            // Print everything before the EXEC_STOP marker
+            *stop_marker = '\0';
+            if (strlen(buffer) > 0) {
+                printf("%s", buffer);
+                fflush(stdout);
+            }
             break;
         }
+        
         printf("%s", buffer);
         fflush(stdout);
     }
@@ -1102,7 +1148,7 @@ int main(int argc, char* argv[]) {
     if (ns_sock != -1) {
         ClientRequest req;
         req.op = OP_EXIT;
-        send(ns_sock, &req, sizeof(ClientRequest), 0);
+        SEND_CLIENT_REQUEST(ns_sock, &req);
         close(ns_sock);
     }
     if (ss_sock != -1) {
